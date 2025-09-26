@@ -1,24 +1,28 @@
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import { Routes, Route } from "react-router-dom";
+import Layout from "./components/Layout";
+import Login from "./components/Login";
+import Hub from "./components/Hub";
+import CompetitionDetails from "./components/CompetitionDetails";
+import TeamRegistration from "./components/TeamRegistration";
+import StudentForm from "./components/StudentForm";
+import SearchRecords from "./components/SearchRecords";
+import CompetitionList from "./components/CompetitionList";
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Login />} />
+        <Route path="/hub" element={<Hub />} />
+        <Route path="/competitions" element={<CompetitionList />} />
+        <Route path="/competition/:id" element={<CompetitionDetails />} />
+        <Route path="/team-registration" element={<TeamRegistration />} />
+        <Route path="/student-form" element={<StudentForm />} />
+        <Route path="/search" element={<SearchRecords />} />
+        <Route path="*" element={<Login />} />
+      </Routes>
+    </Layout>
   );
 }
 
