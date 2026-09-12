@@ -1,25 +1,69 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { ShieldIcon, SparklesIcon } from './common/Icons';
 
-export default function Sidebar({ brandName, links }) {
+export default function Sidebar({ brandName = "UniSync", subtitle = "Campus Platform", sections = [], links = [] }) {
+  // Normalize links if passed as flat array
+  const menuSections = sections.length > 0 ? sections : [
+    {
+      title: "Menu",
+      items: links
+    }
+  ];
+
   return (
-    <div className="sidebar">
-      <div className="sidebar-brand">
-        <div style={{ width: '32px', height: '32px', background: 'var(--primary-color)', borderRadius: '8px' }}></div>
-        {brandName}
+    <aside className="sidebar">
+      {/* Brand Header */}
+      <div className="sidebar-header">
+        <div className="sidebar-brand-logo">
+          <ShieldIcon className="w-6 h-6" />
+        </div>
+        <div className="sidebar-brand-text">
+          <h2>{brandName}</h2>
+          <p>{subtitle}</p>
+        </div>
       </div>
-      <nav className="nav-links">
-        {links.map((link, idx) => (
-          <NavLink 
-            key={idx} 
-            to={link.path} 
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-            end={link.exact}
-          >
-            {link.label}
-          </NavLink>
+
+      {/* Categorized Navigation */}
+      <nav className="sidebar-nav custom-scrollbar">
+        {menuSections.map((section, sIdx) => (
+          <div key={sIdx} className="sidebar-section">
+            {section.title && (
+              <p className="sidebar-section-title">{section.title}</p>
+            )}
+            <ul className="sidebar-links">
+              {section.items.map((item, idx) => {
+                const IconComp = item.icon;
+                return (
+                  <li key={idx}>
+                    <NavLink
+                      to={item.path}
+                      className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                      end={item.exact}
+                    >
+                      {IconComp && <IconComp className="w-5 h-5" />}
+                      <span>{item.label}</span>
+                    </NavLink>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         ))}
       </nav>
-    </div>
+
+      {/* Footer Info Widget */}
+      <div className="sidebar-footer">
+        <div className="sidebar-badge-card">
+          <div className="flex items-center gap-1.5 badge-tag">
+            <SparklesIcon className="w-3.5 h-3.5 text-blue-600" />
+            <span>Campus OS v2.4</span>
+          </div>
+          <p className="badge-desc">
+            Integrated campus events, clubs & student governance console.
+          </p>
+        </div>
+      </div>
+    </aside>
   );
 }

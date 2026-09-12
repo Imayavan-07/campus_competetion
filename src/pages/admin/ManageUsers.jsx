@@ -48,7 +48,7 @@ export default function ManageUsers() {
                   </span>
                 </td>
                 <td style={{ padding: '16px 24px' }}>
-                  <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Manage</button>
+                  <button className="btn btn-outline btn-sm">Manage</button>
                 </td>
               </tr>
             ))}

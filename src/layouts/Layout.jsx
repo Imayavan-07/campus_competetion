@@ -1,5 +1,6 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { TrophyIcon } from "../components/common/Icons";
 
 export default function Layout({ children }) {
   const navigate = useNavigate();
@@ -7,7 +8,9 @@ export default function Layout({ children }) {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="logo">🏆</div>
+        <div className="logo flex items-center justify-center">
+          <TrophyIcon className="w-6 h-6 text-blue-600" />
+        </div>
         <h1 className="title">Campus Competition Hub</h1>
         <nav className="nav">
           <Link to="/hub">Hub</Link>

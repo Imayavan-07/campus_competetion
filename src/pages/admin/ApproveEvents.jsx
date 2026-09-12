@@ -27,8 +27,8 @@ export default function ApproveEvents() {
               <p className="text-muted" style={{ margin: 0 }}>Submitted by {event.club} • Target Date: {event.date}</p>
             </div>
             <div className="flex gap-2">
-              <button className="btn btn-outline" style={{ color: '#e74c3c', borderColor: '#e74c3c' }}>Reject</button>
-              <button className="btn btn-secondary">Approve</button>
+              <button className="btn btn-secondary btn-sm">Approve</button>
+              <button className="btn btn-danger btn-sm">Reject</button>
             </div>
           </div>
         ))}
