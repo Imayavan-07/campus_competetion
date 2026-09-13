@@ -405,8 +405,10 @@ export function EyeSlashIcon({ className = "w-5 h-5" }) {
   );
 }
 
-
-
-
-
-
+export function CurrencyDollarIcon({ className = "w-5 h-5" }) {
+  return (
+    <Icon className={className}>
+      <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 8c-1.11 0-2.08-.402-2.599-1M12 16v2m-6-6a9 9 0 1118 0 9 9 0 01-18 0z" />
+    </Icon>
+  );
+}

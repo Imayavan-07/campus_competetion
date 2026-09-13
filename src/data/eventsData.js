@@ -1,3 +1,18 @@
+export const CAMPUS_VENUES = [
+  { id: 'v1', name: 'Main Innovation Arena', capacity: 450, building: 'Tech Quad Arena', facilities: 'Dual Projectors, Laser Timing Sensors, PA Audio, Bleacher Seating' },
+  { id: 'v2', name: 'Main Auditorium', capacity: 1200, building: 'Central Academic Complex', facilities: 'Stage Lighting, Proscenium Stage, Broadcast Studio, Multi-Mic Array' },
+  { id: 'v3', name: 'Engineering Hall A', capacity: 300, building: 'Faculty of Engineering', facilities: 'Tiered Lecture Seating, Gigabit LAN, Presentation Screens' },
+  { id: 'v4', name: 'Arts Center 102', capacity: 80, building: 'Fine Arts Wing', facilities: 'Adjustable Spotlights, Display Easels, Darkroom Access, Acoustic Panels' },
+  { id: 'v5', name: 'Exhibition Ground', capacity: 2500, building: 'Open Campus Grounds', facilities: 'Outdoor Canopy Staging, High-Power Generators, Food Stall Bays' },
+  { id: 'v6', name: 'Advanced Robotics Lab', capacity: 120, building: 'Research Annex', facilities: '3D Printers, Soldering Benches, ESD-Safe Mats, Power Supplies' },
+  { id: 'v7', name: 'Science Block C', capacity: 200, building: 'Natural Sciences Complex', facilities: 'Fume Hoods, Demonstration Bench, Dual 4K Displays' },
+  { id: 'v8', name: 'Botanical Gardens & Quad', capacity: 150, building: 'Outdoor Campus Grounds', facilities: 'Open-Air Lawn, Solar Lighting, Gazebo Stage' },
+  { id: 'v9', name: 'Innovation Hub Labs', capacity: 250, building: 'Student Innovation Center', facilities: 'Hardware Dev Kits, High-Speed Mesh Wi-Fi, Breakout Pods' },
+  { id: 'v10', name: 'Student Union Lounge', capacity: 100, building: 'Student Life Center', facilities: 'Modular Sofas, AV Monitors, Coffee Bar Station' },
+  { id: 'v11', name: 'Sports Oval', capacity: 1500, building: 'Athletics & Recreation Center', facilities: 'Floodlights, Track Markings, Scoreboard, First-Aid Station' },
+  { id: 'v12', name: 'Debate Hall B', capacity: 90, building: 'Humanities Wing', facilities: 'Podium Mics, Tiered Gallery, Video Recording Suite' }
+];
+
 export const DIRECTORY_EVENTS = [
   { 
     id: 1, 
@@ -322,11 +337,144 @@ export function saveStoredApprovals(list) {
   }
 }
 
+export function enrichEventData(event) {
+  if (!event) return null;
+
+  const rawBudget = typeof event.budget === 'string' 
+    ? parseInt(event.budget.replace(/[^0-9]/g, ''), 10) || 1500 
+    : (event.budget || 1500);
+
+  const defaultBreakdown = {
+    prizeMoney: Math.round(rawBudget * 0.40),
+    refreshments: Math.round(rawBudget * 0.25),
+    decors: Math.round(rawBudget * 0.18),
+    miscPurchases: Math.round(rawBudget * 0.10),
+    customItems: [
+      { id: 'c1', name: 'Audio/Visual Gear Rental', amount: Math.round(rawBudget * 0.04) },
+      { id: 'c2', name: 'Accreditation Badges & Kits', amount: Math.round(rawBudget * 0.03) }
+    ]
+  };
+
+  const attendeesCount = typeof event.attendees === 'number'
+    ? event.attendees
+    : parseInt(String(event.attendees || '200').replace(/[^0-9]/g, ''), 10) || 200;
+
+  const maxCapacity = Math.round(attendeesCount * 1.25);
+
+  const rawStatus = event.status || 'Pending Review';
+  // Normalize approval status
+  let approvalStatus = rawStatus;
+  if (rawStatus === 'Ongoing' || rawStatus === 'Upcoming' || rawStatus === 'Past') {
+    approvalStatus = 'Approved';
+  }
+
+  return {
+    ...event,
+    academicYear: event.academicYear || 'AY 2026 - 2027',
+    session: event.session || (event.timeSlot?.toLowerCase().includes('pm') && !event.timeSlot?.toLowerCase().includes('09:') ? 'Afternoon Session' : 'Morning Session'),
+    approvalStatus: event.approvalStatus || approvalStatus,
+    hosts: event.hosts || [
+      `${event.leadCoordinator || 'Alice Johnson'} (Lead Coordinator)`,
+      'Dr. Robert Chen (Faculty Advisor)',
+      'Priya Patel (Student Co-Host)'
+    ],
+    budgetBreakdown: event.budgetBreakdown || defaultBreakdown,
+    registration: event.registration || {
+      totalRegistered: attendeesCount,
+      maxCapacity: maxCapacity,
+      deadline: event.date ? `Oct 10, 2026` : 'Oct 10, 2026',
+      status: attendeesCount >= maxCapacity ? 'Waitlist Active' : 'Registration Open',
+      targetAudience: 'Undergraduate & Postgraduate Students, Club Delegates & Faculty'
+    },
+    aiSummary: event.aiSummary || {
+      feasibilityScore: '98% Optimal',
+      riskAssessment: 'Low Risk',
+      executiveSummary: `${event.title} is an institutional fixture organized by ${event.club}. It demonstrates strong alignment with varsity co-curricular goals, structured faculty supervision, and high student engagement.`,
+      recommendation: `Recommended for administrative approval. The designated venue (${event.venue}) safely accommodates the expected ${attendeesCount} delegates with adequate safety margins, and cost per attendee ($${(rawBudget / Math.max(1, attendeesCount)).toFixed(2)}) is well within institutional guidelines.`,
+      highlights: [
+        `Venue capacity utilization is ${Math.round((attendeesCount / (maxCapacity || 250)) * 100)}% with zero current timetable conflicts.`,
+        `Budget proposal of $${rawBudget.toLocaleString()} averages $${(rawBudget / Math.max(1, attendeesCount)).toFixed(2)} per registered delegate.`,
+        `Coordinated with academic departments with certified faculty oversight.`
+      ],
+      tags: ['Safety Compliant', 'Budget Optimized', 'Faculty Supervised', 'High Engagement']
+    }
+  };
+}
+
+export function getCustomizedEvents() {
+  try {
+    const saved = localStorage.getItem('unisync_event_customizations');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error('Error reading event customizations:', e);
+  }
+  return {};
+}
+
+export function saveCustomizedEvents(map) {
+  try {
+    localStorage.setItem('unisync_event_customizations', JSON.stringify(map));
+  } catch (e) {
+    console.error('Error saving event customizations:', e);
+  }
+}
+
+export function updateEventBudget(id, newBreakdown, newTotal) {
+  const numId = Number(id);
+  const custom = getCustomizedEvents();
+  const current = custom[numId] || {};
+  custom[numId] = {
+    ...current,
+    budgetBreakdown: newBreakdown,
+    budget: typeof newTotal === 'number' ? `$${newTotal.toLocaleString()}` : newTotal
+  };
+  saveCustomizedEvents(custom);
+  return getEventById(numId);
+}
+
+export function updateEventVenue(id, newVenue) {
+  const numId = Number(id);
+  const custom = getCustomizedEvents();
+  const current = custom[numId] || {};
+  custom[numId] = {
+    ...current,
+    venue: newVenue
+  };
+  saveCustomizedEvents(custom);
+  return getEventById(numId);
+}
+
+export function updateEventStatus(id, newStatus) {
+  const numId = Number(id);
+  const custom = getCustomizedEvents();
+  const current = custom[numId] || {};
+  custom[numId] = {
+    ...current,
+    status: newStatus,
+    approvalStatus: newStatus
+  };
+  saveCustomizedEvents(custom);
+
+  // If approved or rejected, track in proposals
+  if (newStatus === 'Approved') {
+    approveProposal(numId);
+  } else if (newStatus === 'Rejected') {
+    rejectProposal(numId, 'Administrative decision');
+  }
+
+  return getEventById(numId);
+}
+
 export function getEventById(id) {
   const numId = Number(id);
   const approvals = getStoredApprovals();
   const allEvents = [...DIRECTORY_EVENTS, ...approvals, ...APPROVAL_PROPOSALS];
-  return allEvents.find(e => e.id === numId) || null;
+  const found = allEvents.find(e => e.id === numId);
+  if (!found) return null;
+
+  const custom = getCustomizedEvents();
+  const customized = custom[numId] ? { ...found, ...custom[numId] } : found;
+  return enrichEventData(customized);
 }
 
 export function approveProposal(id) {
@@ -362,4 +510,5 @@ export function rejectProposal(id, reason = '') {
   }
   return updated;
 }
+
 
