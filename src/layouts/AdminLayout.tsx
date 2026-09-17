@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
+import Sidebar, { NavSection } from '../components/Sidebar';
 import Header from '../components/Header';
 import { 
   HomeIcon, 
@@ -12,8 +12,8 @@ import {
   ReviewsIcon 
 } from '../components/common/Icons';
 
-export default function AdminLayout() {
-  const adminSections = [
+export default function AdminLayout(): React.JSX.Element {
+  const adminSections: NavSection[] = [
     {
       title: "Core Management",
       items: [

@@ -2,9 +2,33 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { ShieldIcon, SparklesIcon } from './common/Icons';
 
-export default function Sidebar({ brandName = "UniSync", subtitle = "Campus Platform", sections = [], links = [] }) {
+export interface NavItem {
+  label: string;
+  path: string;
+  exact?: boolean;
+  icon?: React.ComponentType<{ className?: string }>;
+}
+
+export interface NavSection {
+  title?: string;
+  items: NavItem[];
+}
+
+export interface SidebarProps {
+  brandName?: string;
+  subtitle?: string;
+  sections?: NavSection[];
+  links?: NavItem[];
+}
+
+export default function Sidebar({
+  brandName = "UniSync",
+  subtitle = "Campus Platform",
+  sections = [],
+  links = []
+}: SidebarProps): React.JSX.Element {
   // Normalize links if passed as flat array
-  const menuSections = sections.length > 0 ? sections : [
+  const menuSections: NavSection[] = sections.length > 0 ? sections : [
     {
       title: "Menu",
       items: links
@@ -59,9 +83,7 @@ export default function Sidebar({ brandName = "UniSync", subtitle = "Campus Plat
             <SparklesIcon className="w-3.5 h-3.5 text-blue-600" />
             <span>Campus OS v2.4</span>
           </div>
-          <p className="badge-desc">
-            Integrated campus events, clubs & student governance console.
-          </p>
+          <p className="footer-subtext">Verified University Node</p>
         </div>
       </div>
     </aside>

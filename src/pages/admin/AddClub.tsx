@@ -334,7 +334,7 @@ export default function AddClub() {
                 className="form-input"
                 placeholder="15"
                 value={formData.members}
-                onChange={(e) => setFormData({ ...formData, members: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, members: Number(e.target.value) || 0 })}
               />
             </div>
 

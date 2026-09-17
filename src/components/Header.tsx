@@ -4,15 +4,21 @@ import {
   BellIcon, 
   SunIcon, 
   MoonIcon, 
-  LogoutIcon,
-  CheckIcon
+  LogoutIcon 
 } from './common/Icons';
-import Modal from './common/Modal';
 
-export default function Header({ roleLabel = "Administrator", userName = "Ares Mitchell" }) {
+export interface HeaderProps {
+  roleLabel?: string;
+  userName?: string;
+}
+
+export default function Header({
+  roleLabel = "Administrator",
+  userName = "Ares Mitchell"
+}: HeaderProps): React.JSX.Element {
   const navigate = useNavigate();
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+  const [isNotifOpen, setIsNotifOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');

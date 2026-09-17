@@ -1,8 +1,12 @@
-import React from "react";
+import React, { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { TrophyIcon } from "../components/common/Icons";
 
-export default function Layout({ children }) {
+interface LayoutProps {
+  children?: ReactNode;
+}
+
+export default function Layout({ children }: LayoutProps): React.JSX.Element {
   const navigate = useNavigate();
 
   return (

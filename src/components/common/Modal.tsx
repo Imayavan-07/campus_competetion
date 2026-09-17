@@ -1,9 +1,27 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, ReactNode } from 'react';
 import { XMarkIcon } from './Icons';
 
-export default function Modal({ isOpen, onClose, title, subtitle, children, size = 'md', footer }) {
+export interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: ReactNode;
+  subtitle?: ReactNode;
+  children: ReactNode;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+  footer?: ReactNode;
+}
+
+export default function Modal({
+  isOpen,
+  onClose,
+  title,
+  subtitle,
+  children,
+  size = 'md',
+  footer
+}: ModalProps): React.JSX.Element | null {
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
         onClose();
       }

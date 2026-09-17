@@ -1,7 +1,23 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-export default function EventCard({ title, date, club, description, tags, linkTo }) {
+export interface EventCardProps {
+  title: string;
+  date: string;
+  club: string;
+  description: string;
+  tags?: string[];
+  linkTo?: string;
+}
+
+export default function EventCard({
+  title,
+  date,
+  club,
+  description,
+  tags,
+  linkTo
+}: EventCardProps): React.JSX.Element {
   return (
     <div className="card flex flex-col justify-between" style={{ height: '100%' }}>
       <div>

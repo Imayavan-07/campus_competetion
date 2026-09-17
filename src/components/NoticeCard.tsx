@@ -1,6 +1,20 @@
 import React from 'react';
 
-export default function NoticeCard({ title, date, author, content, priority }) {
+export interface NoticeCardProps {
+  title: string;
+  date: string;
+  author: string;
+  content: string;
+  priority?: string;
+}
+
+export default function NoticeCard({
+  title,
+  date,
+  author,
+  content,
+  priority
+}: NoticeCardProps): React.JSX.Element {
   return (
     <div className="card">
       <div className="flex justify-between items-center mb-4">

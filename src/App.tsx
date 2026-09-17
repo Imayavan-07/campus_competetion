@@ -31,7 +31,7 @@ import EventReviews from './pages/admin/EventReviews';
 
 import Login from './pages/Login';
 
-export default function App() {
+export default function App(): React.JSX.Element {
   return (
     <ToastProvider>
       <Routes>

@@ -495,7 +495,7 @@ export default function ClubDetails() {
                   min="1"
                   className="form-input font-bold"
                   value={membersCount}
-                  onChange={(e) => setMembersCount(e.target.value)}
+                  onChange={(e) => setMembersCount(Number(e.target.value) || 0)}
                 />
               </div>
 
@@ -509,7 +509,7 @@ export default function ClubDetails() {
                   min="0"
                   className="form-input font-bold"
                   value={eventsCount}
-                  onChange={(e) => setEventsCount(e.target.value)}
+                  onChange={(e) => setEventsCount(Number(e.target.value) || 0)}
                 />
               </div>
             </div>
@@ -518,7 +518,7 @@ export default function ClubDetails() {
             <div className="form-group">
               <label className="form-label font-bold text-xs">Mission Statement & Club Description</label>
               <textarea
-                rows="3"
+                rows={3}
                 className="form-input"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}

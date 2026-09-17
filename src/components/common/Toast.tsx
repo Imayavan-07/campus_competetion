@@ -1,12 +1,24 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { CheckIcon, XMarkIcon, InfoIcon, AlertCircleIcon } from './Icons';
 
-const ToastContext = createContext(null);
+export type ToastType = 'success' | 'info' | 'warning' | 'error';
 
-export function ToastProvider({ children }) {
-  const [toasts, setToasts] = useState([]);
+export interface ToastItem {
+  id: number;
+  message: string;
+  type: ToastType;
+}
 
-  const addToast = useCallback((message, type = 'success') => {
+export interface ToastContextType {
+  showToast: (message: string, type?: ToastType) => void;
+}
+
+const ToastContext = createContext<ToastContextType | null>(null);
+
+export function ToastProvider({ children }: { children: ReactNode }): React.JSX.Element {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const addToast = useCallback((message: string, type: ToastType = 'success') => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
@@ -14,11 +26,11 @@ export function ToastProvider({ children }) {
     }, 4000);
   }, []);
 
-  const removeToast = useCallback((id) => {
+  const removeToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const renderIcon = (type) => {
+  const renderIcon = (type: ToastType) => {
     switch (type) {
       case 'success':
         return <CheckIcon className="w-4 h-4 text-emerald-600" />;
@@ -53,11 +65,11 @@ export function ToastProvider({ children }) {
   );
 }
 
-export function useToast() {
+export function useToast(): ToastContextType {
   const context = useContext(ToastContext);
   if (!context) {
     // Fallback if not inside provider
-    return { showToast: (msg) => alert(msg) };
+    return { showToast: (msg: string) => alert(msg) };
   }
   return context;
 }

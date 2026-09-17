@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
+import Sidebar, { NavSection } from '../components/Sidebar';
 import Header from '../components/Header';
 import { 
   HomeIcon, 
@@ -8,8 +8,8 @@ import {
   NoticeIcon 
 } from '../components/common/Icons';
 
-export default function ClubLayout() {
-  const clubSections = [
+export default function ClubLayout(): React.JSX.Element {
+  const clubSections: NavSection[] = [
     {
       title: "Overview",
       items: [
