@@ -15,37 +15,31 @@ import {
 } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
-
-const DEFAULT_CLUBS = [
-  { id: 1, name: 'Campus Photography Club', dept: 'Arts & Culture', members: 45, events: 3, president: 'Evan Wright', coordinator: 'Alice Johnson', email: 'photography@university.edu' },
-  { id: 2, name: 'Robotics Society', dept: 'Engineering', members: 120, events: 1, president: 'Jane Doe', coordinator: 'Bob Smith', email: 'robotics@university.edu' },
-  { id: 3, name: 'Debate & Oratory Team', dept: 'Arts & Culture', members: 30, events: 5, president: 'Michael Scott', coordinator: 'Alice Johnson', email: 'debate@university.edu' },
-  { id: 4, name: 'Quantum & Chess Guild', dept: 'Science', members: 25, events: 2, president: 'Beth Harmon', coordinator: 'Fiona Gallagher', email: 'chess@university.edu' },
-  { id: 5, name: 'Collegiate Esports Society', dept: 'Sports', members: 88, events: 4, president: 'Tenzing Norgay', coordinator: 'George Miller', email: 'esports@university.edu' },
-  { id: 6, name: 'Renewable Energies Club', dept: 'Engineering', members: 54, events: 2, president: 'Claire Bennett', coordinator: 'Diana Prince', email: 'renewables@university.edu' },
-];
+import { clubsService, Club } from '../../services/clubsService';
 
 export default function Clubs() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const [clubs, setClubs] = useState(() => {
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const fetchClubs = async () => {
     try {
-      const saved = localStorage.getItem('unisync_clubs');
-      if (saved !== null) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
-      } else {
-        localStorage.setItem('unisync_clubs', JSON.stringify(DEFAULT_CLUBS));
-        return DEFAULT_CLUBS;
-      }
-    } catch (e) {
-      console.warn('Could not read saved clubs', e);
+      setLoading(true);
+      const res = await clubsService.getClubs();
+      setClubs(res.data);
+    } catch (e: any) {
+      console.error('Failed to load clubs:', e);
+      showToast('Could not load clubs from server.', 'error');
+    } finally {
+      setLoading(false);
     }
-    return DEFAULT_CLUBS;
-  });
+  };
+
+  useEffect(() => {
+    fetchClubs();
+  }, []);
 
   // Search & Filter state (status dropped)
   const [search, setSearch] = useState('');

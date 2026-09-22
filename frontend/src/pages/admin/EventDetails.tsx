@@ -22,13 +22,8 @@ import {
 } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
-import { 
-  getEventById, 
-  CAMPUS_VENUES,
-  updateEventBudget,
-  updateEventVenue,
-  updateEventStatus
-} from '../../data/eventsData';
+import { eventsService, EventItem } from '../../services/eventsService';
+import { venuesService, Venue } from '../../services/venuesService';
 
 export default function EventDetails() {
   const { id } = useParams();
@@ -37,13 +32,14 @@ export default function EventDetails() {
   const location = useLocation();
   const { showToast } = useToast();
 
-  const [event, setEvent] = useState(null);
+  const [event, setEvent] = useState<any>(null);
+  const [venues, setVenues] = useState<Venue[]>([]);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
 
   // Budget card edit state (Admin only)
   const [isEditingBudget, setIsEditingBudget] = useState(false);
-  const [editableBudget, setEditableBudget] = useState(null);
+  const [editableBudget, setEditableBudget] = useState<any>(null);
 
   // Venue state
   const [selectedVenue, setSelectedVenue] = useState('');
@@ -55,12 +51,31 @@ export default function EventDetails() {
   const isFromApprovals = sourceParam === 'approvals' || (!sourceParam && Number(id) >= 100);
 
   useEffect(() => {
-    const found = getEventById(id);
-    if (found) {
-      setEvent(found);
-      setEditableBudget(found.budgetBreakdown);
-      setSelectedVenue(found.venue);
+    async function fetchEventDetails() {
+      if (!id) return;
+      try {
+        const res = await eventsService.getEventById(id);
+        if (res.data) {
+          setEvent(res.data);
+          setEditableBudget(res.data.budgetBreakdown);
+          setSelectedVenue(res.data.venue);
+        }
+      } catch (err: any) {
+        console.error('Failed to load event details:', err);
+      }
     }
+
+    async function loadVenues() {
+      try {
+        const vRes = await venuesService.getVenues();
+        if (vRes.data) setVenues(vRes.data);
+      } catch (e) {
+        console.warn('Could not load venues:', e);
+      }
+    }
+
+    fetchEventDetails();
+    loadVenues();
   }, [id]);
 
   if (!event) {
@@ -82,43 +97,55 @@ export default function EventDetails() {
   }
 
   // --- Handlers for 3 Action Buttons ---
-  const handleApprove = () => {
-    const updated = updateEventStatus(event.id, 'Approved');
-    setEvent(updated);
-    showToast(`Event proposal "${event.title}" has been Approved!`, 'success');
+  const handleApprove = async () => {
+    try {
+      await eventsService.updateStatus(event.id, 'Upcoming', 'Approved');
+      setEvent((prev: any) => ({ ...prev, status: 'Upcoming', approvalStatus: 'Approved' }));
+      showToast(`Event proposal "${event.title}" has been Approved!`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to approve event.', 'error');
+    }
   };
 
-  const handleUnderReview = () => {
-    const updated = updateEventStatus(event.id, 'Under Review');
-    setEvent(updated);
-    showToast(`Event "${event.title}" marked as Under Review.`, 'info');
+  const handleUnderReview = async () => {
+    try {
+      await eventsService.updateStatus(event.id, 'Pending Review', 'Under Review');
+      setEvent((prev: any) => ({ ...prev, status: 'Pending Review', approvalStatus: 'Under Review' }));
+      showToast(`Event "${event.title}" marked as Under Review.`, 'info');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update review status.', 'error');
+    }
   };
 
-  const handleConfirmReject = () => {
-    const updated = updateEventStatus(event.id, 'Rejected');
-    setEvent(updated);
-    setIsRejectModalOpen(false);
-    showToast(`Event proposal "${event.title}" marked as Rejected. Feedback recorded.`, 'error');
+  const handleConfirmReject = async () => {
+    try {
+      await eventsService.updateStatus(event.id, 'Rejected', 'Rejected');
+      setEvent((prev: any) => ({ ...prev, status: 'Rejected', approvalStatus: 'Rejected' }));
+      setIsRejectModalOpen(false);
+      showToast(`Event proposal "${event.title}" marked as Rejected. Feedback recorded.`, 'error');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to reject event.', 'error');
+    }
   };
 
   // --- Budget Breakdown Helpers ---
-  const calculateTotal = (b) => {
+  const calculateTotal = (b: any) => {
     if (!b) return 0;
     const base = (Number(b.prizeMoney) || 0) + (Number(b.refreshments) || 0) + (Number(b.decors) || 0) + (Number(b.miscPurchases) || 0);
-    const custom = (b.customItems || []).reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
+    const custom = (b.customItems || []).reduce((acc: number, item: any) => acc + (Number(item.amount) || 0), 0);
     return base + custom;
   };
 
-  const handleBudgetNumberChange = (field, val) => {
+  const handleBudgetNumberChange = (field: string, val: string) => {
     const parsed = parseInt(val, 10);
-    setEditableBudget(prev => ({
+    setEditableBudget((prev: any) => ({
       ...prev,
       [field]: isNaN(parsed) ? 0 : Math.max(0, parsed)
     }));
   };
 
-  const handleCustomItemChange = (index, field, val) => {
-    setEditableBudget(prev => {
+  const handleCustomItemChange = (index: number, field: string, val: any) => {
+    setEditableBudget((prev: any) => {
       const updated = [...(prev.customItems || [])];
       updated[index] = {
         ...updated[index],
@@ -129,7 +156,7 @@ export default function EventDetails() {
   };
 
   const handleAddCustomItem = () => {
-    setEditableBudget(prev => ({
+    setEditableBudget((prev: any) => ({
       ...prev,
       customItems: [
         ...(prev.customItems || []),
@@ -138,19 +165,27 @@ export default function EventDetails() {
     }));
   };
 
-  const handleRemoveCustomItem = (index) => {
-    setEditableBudget(prev => {
-      const updated = (prev.customItems || []).filter((_, i) => i !== index);
+  const handleRemoveCustomItem = (index: number) => {
+    setEditableBudget((prev: any) => {
+      const updated = (prev.customItems || []).filter((_: any, i: number) => i !== index);
       return { ...prev, customItems: updated };
     });
   };
 
-  const handleSaveBudget = () => {
+  const handleSaveBudget = async () => {
     const liveTotal = calculateTotal(editableBudget);
-    const updated = updateEventBudget(event.id, editableBudget, liveTotal);
-    setEvent(updated);
-    setIsEditingBudget(false);
-    showToast(`Event budget allocation updated to $${liveTotal.toLocaleString()}!`, 'success');
+    try {
+      await eventsService.updateBudget(event.id, editableBudget, liveTotal);
+      setEvent((prev: any) => ({
+        ...prev,
+        budgetBreakdown: editableBudget,
+        budget: `$${liveTotal.toLocaleString()}`
+      }));
+      setIsEditingBudget(false);
+      showToast(`Event budget allocation updated to $${liveTotal.toLocaleString()}!`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update budget.', 'error');
+    }
   };
 
   const handleCancelBudgetEdit = () => {
@@ -159,15 +194,21 @@ export default function EventDetails() {
   };
 
   // --- Venue Selector Helper ---
-  const handleVenueSelect = (e) => {
+  const handleVenueSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newVenue = e.target.value;
     setSelectedVenue(newVenue);
-    const updated = updateEventVenue(event.id, newVenue);
-    setEvent(updated);
-    showToast(`Campus venue assigned to: "${newVenue}"!`, 'success');
+    try {
+      await eventsService.updateVenue(event.id, newVenue);
+      setEvent((prev: any) => ({ ...prev, venue: newVenue }));
+      showToast(`Event venue relocated to ${newVenue}!`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update venue.', 'error');
+    }
   };
 
-  const selectedVenueMeta = CAMPUS_VENUES.find(v => v.name === (selectedVenue || event.venue)) || {
+  const selectedVenueMeta = venues.find(v => v.name === (selectedVenue || event.venue)) || {
+    id: 'v_default',
+    name: selectedVenue || event.venue,
     capacity: 350,
     building: 'Campus Main Facility',
     facilities: 'Standard Audio/Visual, Projector, Air-Conditioned'
@@ -856,7 +897,7 @@ export default function EventDetails() {
                 value={selectedVenue || event.venue}
                 onChange={handleVenueSelect}
               >
-                {CAMPUS_VENUES.map(v => (
+                {venues.map(v => (
                   <option key={v.id} value={v.name}>
                     {v.name} (Cap: {v.capacity})
                   </option>

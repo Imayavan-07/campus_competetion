@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ToastProvider } from './components/common/Toast';
+import { AuthProvider } from './context/AuthContext';
 
 // Layouts
 import StudentLayout from './layouts/StudentLayout';
@@ -34,47 +35,52 @@ import EventDetails from './pages/admin/EventDetails';
 import EventReviews from './pages/admin/EventReviews';
 
 import Login from './pages/Login';
+import ErrorBoundary from './components/common/ErrorBoundary';
 
 export default function App(): React.JSX.Element {
   return (
-    <ToastProvider>
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
+    <AuthProvider>
+      <ToastProvider>
+        <ErrorBoundary fallbackTitle="Application Portal Error">
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<Login />} />
 
-        {/* Student Routes */}
-        <Route path="/student" element={<StudentLayout />}>
-          <Route index element={<StudentDashboard />} />
-          <Route path="competitions" element={<StudentCompetitions />} />
-        </Route>
+          {/* Student Routes */}
+          <Route path="/student" element={<StudentLayout />}>
+            <Route index element={<StudentDashboard />} />
+            <Route path="competitions" element={<StudentCompetitions />} />
+          </Route>
 
-        {/* Club Routes */}
-        <Route path="/club" element={<ClubLayout />}>
-          <Route index element={<ClubDashboard />} />
-          <Route path="post-event" element={<PostNewEvent />} />
-          <Route path="events" element={<ManageEvents />} />
-          <Route path="registrations" element={<ClubRegistrations />} />
-          <Route path="forms" element={<ClubRegistrationForms />} />
-          <Route path="events/:id" element={<ClubEventDetails />} />
-          <Route path="calendar" element={<ClubCalendar />} />
-          <Route path="reviews" element={<ClubEventReviews />} />
-        </Route>
+          {/* Club Routes */}
+          <Route path="/club" element={<ClubLayout />}>
+            <Route index element={<ClubDashboard />} />
+            <Route path="post-event" element={<PostNewEvent />} />
+            <Route path="events" element={<ManageEvents />} />
+            <Route path="registrations" element={<ClubRegistrations />} />
+            <Route path="forms" element={<ClubRegistrationForms />} />
+            <Route path="events/:id" element={<ClubEventDetails />} />
+            <Route path="calendar" element={<ClubCalendar />} />
+            <Route path="reviews" element={<ClubEventReviews />} />
+          </Route>
 
-        {/* Admin Routes */}
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<AdminDashboard />} />
-          <Route path="members" element={<Members />} />
-          <Route path="clubs" element={<Clubs />} />
-          <Route path="clubs/new" element={<AddClub />} />
-          <Route path="clubs/:id" element={<ClubDetails />} />
-          <Route path="calendar" element={<GlobalCalendar />} />
-          <Route path="approvals" element={<EventApprovals />} />
-          <Route path="approvals/:id" element={<EventDetails />} />
-          <Route path="events" element={<EventDirectory />} />
-          <Route path="events/:id" element={<EventDetails />} />
-          <Route path="reviews" element={<EventReviews />} />
-        </Route>
-      </Routes>
+          {/* Admin Routes */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="members" element={<Members />} />
+            <Route path="clubs" element={<Clubs />} />
+            <Route path="clubs/new" element={<AddClub />} />
+            <Route path="clubs/:id" element={<ClubDetails />} />
+            <Route path="calendar" element={<GlobalCalendar />} />
+            <Route path="approvals" element={<EventApprovals />} />
+            <Route path="approvals/:id" element={<EventDetails />} />
+            <Route path="events" element={<EventDirectory />} />
+            <Route path="events/:id" element={<EventDetails />} />
+            <Route path="reviews" element={<EventReviews />} />
+          </Route>
+        </Routes>
+      </ErrorBoundary>
     </ToastProvider>
-  );
+  </AuthProvider>
+);
 }

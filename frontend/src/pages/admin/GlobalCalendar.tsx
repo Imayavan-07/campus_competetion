@@ -1,20 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PlusIcon, CalendarIcon, ClockIcon } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
+import { eventsService, EventItem } from '../../services/eventsService';
 
 export default function GlobalCalendar() {
   const { showToast } = useToast();
-  const [view, setView] = useState('monthly'); // 'monthly' or 'daily'
-  const [activeModal, setActiveModal] = useState(null); // 'newEvent' | 'viewEvent'
-  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [view, setView] = useState<'monthly' | 'daily'>('monthly');
+  const [activeModal, setActiveModal] = useState<'newEvent' | 'viewEvent' | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [events, setEvents] = useState([
-    { id: 1, title: 'Photography Masterclass', date: '08', time: '10:00 AM - 1:00 PM', venue: 'Arts Center 102', club: 'Photography Guild', type: 'workshop' },
-    { id: 2, title: 'Quantum Computing Keynote', date: '15', time: '2:00 PM - 4:00 PM', venue: 'Main Auditorium', club: 'Computer Science', type: 'seminar' },
-    { id: 3, title: 'Autonomous Drone Trials', date: '21', time: '11:00 AM - 3:00 PM', venue: 'Sports Oval', club: 'Robotics Society', type: 'competition' },
-    { id: 4, title: 'Collegiate Debate Qualifiers', date: '25', time: '9:00 AM - 12:30 PM', venue: 'Debate Hall B', club: 'Oratory Society', type: 'meeting' },
-  ]);
+  const [events, setEvents] = useState<any[]>([]);
 
   const [eventForm, setEventForm] = useState({
     title: '',
@@ -24,28 +21,63 @@ export default function GlobalCalendar() {
     club: 'General Campus'
   });
 
-  const handleCreateEvent = (e) => {
-    e.preventDefault();
-    if (!eventForm.title || !eventForm.venue) return;
-    const newEvt = {
-      id: Date.now(),
-      ...eventForm,
-      type: 'workshop'
-    };
-    setEvents([...events, newEvt]);
-    showToast(`Event "${eventForm.title}" slotted for Day ${eventForm.date}!`, 'success');
-    setActiveModal(null);
-    setEventForm({ title: '', date: '18', time: '10:00 AM - 12:00 PM', venue: '', club: 'General Campus' });
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+      const data = await eventsService.getEvents();
+      const mapped = (data || []).map((e: any) => {
+        let dayStr = '15';
+        if (e.day) {
+          dayStr = String(e.day).padStart(2, '0');
+        } else if (e.date) {
+          const match = String(e.date).match(/\d{1,2}/);
+          if (match) dayStr = match[0].padStart(2, '0');
+        }
+        return {
+          id: e.id,
+          title: e.title,
+          date: dayStr,
+          time: e.timeSlot || e.time_slot || '10:00 AM - 1:00 PM',
+          venue: e.venue || 'Campus Auditorium',
+          club: e.club || 'General Campus',
+          type: e.category || 'workshop'
+        };
+      });
+      setEvents(mapped);
+    } catch (err: any) {
+      showToast('Failed to load events from backend', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const openDayEvent = (dayStr) => {
-    const existing = events.find(e => e.date === dayStr);
-    if (existing) {
-      setSelectedEvent(existing);
-      setActiveModal('viewEvent');
-    } else {
-      setEventForm({ ...eventForm, date: dayStr });
-      setActiveModal('newEvent');
+  useEffect(() => {
+    loadEvents();
+  }, []);
+
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eventForm.title || !eventForm.venue) return;
+    try {
+      await eventsService.createEvent({
+        title: eventForm.title,
+        club: eventForm.club,
+        venue: eventForm.venue,
+        date: `2026-09-${eventForm.date.padStart(2, '0')}`,
+        timeSlot: eventForm.time,
+        category: 'academic',
+        description: `Scheduled slot on day ${eventForm.date}`,
+        budget: '5000',
+        attendees: 100,
+        status: 'Upcoming',
+        approvalStatus: 'Approved'
+      });
+      showToast(`Event "${eventForm.title}" slotted for Day ${eventForm.date}!`, 'success');
+      setActiveModal(null);
+      setEventForm({ title: '', date: '18', time: '10:00 AM - 12:00 PM', venue: '', club: 'General Campus' });
+      loadEvents();
+    } catch (err: any) {
+      showToast('Failed to slot event', 'error');
     }
   };
 

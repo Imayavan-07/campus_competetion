@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   SearchIcon, 
@@ -8,19 +8,38 @@ import {
   ArrowRightIcon 
 } from '../../components/common/Icons';
 import { useToast } from '../../components/common/Toast';
-import { DIRECTORY_EVENTS } from '../../data/eventsData';
+import { eventsService, EventItem } from '../../services/eventsService';
 
 export default function EventDirectory() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const events = DIRECTORY_EVENTS;
+  useEffect(() => {
+    async function loadEvents() {
+      try {
+        setLoading(true);
+        const res = await eventsService.getEvents();
+        // Show approved / ongoing / past / upcoming fixtures in directory
+        setEvents(res.data.filter((e) => e.status !== 'Rejected'));
+      } catch (err: any) {
+        console.error('Failed to load directory events:', err);
+        showToast('Could not load events from server.', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadEvents();
+  }, []);
 
-  const filteredEvents = events.filter(e => {
+  const filteredEvents = events.filter((e) => {
     const matchFilter = filter === 'All' || e.status === filter;
-    const matchSearch = e.title.toLowerCase().includes(search.toLowerCase()) || e.club.toLowerCase().includes(search.toLowerCase());
+    const matchSearch =
+      e.title.toLowerCase().includes(search.toLowerCase()) ||
+      e.club.toLowerCase().includes(search.toLowerCase());
     return matchFilter && matchSearch;
   });
 

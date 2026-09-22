@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   PlusIcon,
   SearchIcon,
@@ -12,28 +12,38 @@ import {
 } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
+import { membersService, Member } from '../../services/membersService';
 
 export default function Members() {
   const { showToast } = useToast();
 
-  const [members, setMembers] = useState([
-    { id: 1, name: "Alice Johnson", role: "Club Coordinator", email: "alice@university.edu", phone: "+1 (555) 342-8910", dept: "Computer Science", assignedClub: "Computer Science Society", status: "Active" },
-    { id: 2, name: "Bob Smith", role: "Club Coordinator", email: "bob@university.edu", phone: "+1 (555) 678-1290", dept: "Electronics", assignedClub: "Robotics Society", status: "Active" },
-    { id: 3, name: "Charlie Davis", role: "Admin", email: "charlie@university.edu", phone: "+1 (555) 987-4321", dept: "Registrar Office", assignedClub: "Central Governance", status: "Active" },
-    { id: 4, name: "Diana Prince", role: "Club Coordinator", email: "diana@university.edu", phone: "+1 (555) 890-3456", dept: "Civil Engineering", assignedClub: "Sustainable Habitat Guild", status: "Inactive" },
-    { id: 5, name: "Evan Wright", role: "Admin", email: "evan@university.edu", phone: "+1 (555) 234-8765", dept: "Robotics Facility", assignedClub: "Drone Society", status: "Active" },
-    { id: 6, name: "Fiona Gallagher", role: "Club Coordinator", email: "fiona@university.edu", phone: "+1 (555) 456-7890", dept: "Data Science", assignedClub: "AI & ML Guild", status: "Active" },
-    { id: 7, name: "George Miller", role: "Club Coordinator", email: "george@university.edu", phone: "+1 (555) 789-0123", dept: "Mechanical Engineering", assignedClub: "Formula Student Racing", status: "Active" },
-    { id: 8, name: "Hannah Abbott", role: "Admin", email: "hannah@university.edu", phone: "+1 (555) 654-3210", dept: "Biotechnology Labs", assignedClub: "Bio-Safety Council", status: "Inactive" }
-  ]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const fetchMembers = async () => {
+    try {
+      setLoading(true);
+      const res = await membersService.getMembers();
+      setMembers(res.data);
+    } catch (e: any) {
+      console.error('Failed to load members:', e);
+      showToast('Could not load members from server.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMembers();
+  }, []);
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [deptFilter, setDeptFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortBy, setSortBy] = useState('name-asc');
-  const [activeModal, setActiveModal] = useState(null); // 'addMember' | 'editMember' | 'viewMember' | 'deleteMember' | 'customFilter'
-  const [selectedMember, setSelectedMember] = useState(null);
+  const [activeModal, setActiveModal] = useState<string | null>(null);
+  const [selectedMember, setSelectedMember] = useState<any>(null);
 
   // Add Member Form
   const [formData, setFormData] = useState({
@@ -43,18 +53,19 @@ export default function Members() {
     role: 'Club Coordinator',
     dept: 'Computer Science',
     assignedClub: 'Robotics Society',
-    status: 'Active'
+    status: 'Active' as 'Active' | 'Inactive',
   });
 
-  const handleToggleStatus = (id) => {
-    setMembers(prev => prev.map(m => {
-      if (m.id === id) {
-        const nextStatus = m.status === 'Active' ? 'Inactive' : 'Active';
-        showToast(`Member "${m.name}" set to ${nextStatus}`, nextStatus === 'Active' ? 'success' : 'warning');
-        return { ...m, status: nextStatus };
-      }
-      return m;
-    }));
+  const handleToggleStatus = async (id: number) => {
+    try {
+      const res = await membersService.toggleStatus(id);
+      setMembers((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, status: res.data.status } : m))
+      );
+      showToast(res.message || 'Status updated', res.data.status === 'Active' ? 'success' : 'warning');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to toggle status.', 'error');
+    }
   };
 
   const handleResetFilters = () => {
@@ -93,41 +104,52 @@ export default function Members() {
     return 0;
   });
 
-  const handleAddMember = (e) => {
+  const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.phone) {
       showToast('Please fill in all mandatory fields (Name, Email, Phone)', 'warning');
       return;
     }
-    const newMember = {
-      id: Date.now(),
-      ...formData
-    };
-    setMembers([newMember, ...members]);
-    showToast(`Coordinator "${formData.name}" onboarded successfully!`, 'success');
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      role: 'Club Coordinator',
-      dept: 'Computer Science',
-      assignedClub: 'Robotics Society',
-      status: 'Active'
-    });
-    setActiveModal(null);
+    try {
+      const res = await membersService.createMember(formData);
+      setMembers([res.data, ...members]);
+      showToast(`Coordinator "${formData.name}" onboarded successfully!`, 'success');
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        role: 'Club Coordinator',
+        dept: 'Computer Science',
+        assignedClub: 'Robotics Society',
+        status: 'Active',
+      });
+      setActiveModal(null);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to onboard member.', 'error');
+    }
   };
 
-  const handleEditMember = (e) => {
+  const handleEditMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMembers(members.map(m => m.id === selectedMember.id ? selectedMember : m));
-    showToast(`Updated member record for "${selectedMember.name}"`, 'success');
-    setActiveModal(null);
+    try {
+      const res = await membersService.updateMember(selectedMember.id, selectedMember);
+      setMembers(members.map((m) => (m.id === selectedMember.id ? res.data : m)));
+      showToast(`Updated member record for "${selectedMember.name}"`, 'success');
+      setActiveModal(null);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update member.', 'error');
+    }
   };
 
-  const handleDeleteMember = () => {
-    setMembers(members.filter(m => m.id !== selectedMember.id));
-    showToast(`Revoked access for "${selectedMember.name}"`, 'error');
-    setActiveModal(null);
+  const handleDeleteMember = async () => {
+    try {
+      await membersService.deleteMember(selectedMember.id);
+      setMembers(members.filter((m) => m.id !== selectedMember.id));
+      showToast(`Revoked access for "${selectedMember.name}"`, 'error');
+      setActiveModal(null);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete member.', 'error');
+    }
   };
 
   return (

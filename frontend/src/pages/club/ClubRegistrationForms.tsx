@@ -17,7 +17,9 @@ import {
   ShieldIcon 
 } from '../../components/common/Icons';
 import { useToast } from '../../components/common/Toast';
-import { getAllClubEvents, getEventById, updateEventRegForm } from '../../data/eventsData';
+import { useAuth } from '../../context/AuthContext';
+import { eventsService, EventItem } from '../../services/eventsService';
+import { formsService } from '../../services/formsService';
 
 export interface FormQuestion {
   id: string;
@@ -40,11 +42,14 @@ export default function ClubRegistrationForms() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const currentClubName = user?.club || 'Robotics Society';
 
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterMode, setFilterMode] = useState<'all' | 'custom' | 'standard'>('all');
+  const [loading, setLoading] = useState(true);
 
   // Form Builder State for currently selected event
   const [formConfig, setFormConfig] = useState<RegFormConfig>({
@@ -59,23 +64,34 @@ export default function ClubRegistrationForms() {
   const [previewTestSubmitted, setPreviewTestSubmitted] = useState<boolean>(false);
 
   // Load all events
-  const loadEvents = () => {
-    const list = getAllClubEvents();
-    setEvents(list);
-    return list;
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+      const list = await eventsService.getEvents({ club: currentClubName });
+      setEvents(list || []);
+      return list || [];
+    } catch (err: any) {
+      showToast('Failed to load events from server', 'error');
+      return [];
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    const list = loadEvents();
-    const paramId = searchParams.get('eventId');
-    if (paramId) {
-      const num = Number(paramId);
-      const found = list.find(e => e.id === num);
-      if (found) {
-        selectEvent(found);
+    async function init() {
+      const list = await loadEvents();
+      const paramId = searchParams.get('eventId');
+      if (paramId) {
+        const num = Number(paramId);
+        const found = list.find(e => e.id === num);
+        if (found) {
+          selectEvent(found);
+        }
       }
     }
-  }, [searchParams]);
+    init();
+  }, [searchParams, currentClubName]);
 
   const selectEvent = (evt: any) => {
     setSelectedEventId(evt.id);
@@ -159,7 +175,7 @@ export default function ClubRegistrationForms() {
     }));
   };
 
-  const handleSaveForm = (e?: React.FormEvent) => {
+  const handleSaveForm = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!selectedEventId) return;
 
@@ -168,10 +184,18 @@ export default function ClubRegistrationForms() {
       return;
     }
 
-    updateEventRegForm(selectedEventId, formConfig, true);
-    setHasRegForm(true);
-    loadEvents();
-    showToast(`Registration form for "${selectedEvent?.title}" saved & deployed!`, 'success');
+    try {
+      await formsService.updateConfig(selectedEventId, formConfig);
+      await eventsService.updateEvent(selectedEventId, {
+        hasRegForm: true,
+        regFormConfig: formConfig
+      });
+      setHasRegForm(true);
+      await loadEvents();
+      showToast(`Registration form for "${selectedEvent?.title}" saved & deployed!`, 'success');
+    } catch (err: any) {
+      showToast('Failed to save registration form on server', 'error');
+    }
   };
 
   const handleResetToDefault = () => {

@@ -14,214 +14,38 @@ import {
   EditIcon
 } from '../../components/common/Icons';
 import { useToast } from '../../components/common/Toast';
-
-const DEFAULT_REVIEW_EVENTS = [
-  {
-    id: 1,
-    title: 'Fall Tech Career Fair 2026',
-    club: 'University Placement Cell',
-    date: 'Sept 10, 2026',
-    venue: 'Exhibition Ground',
-    overallRating: 4.8,
-    adminEventFeedback: {
-      feedback: 'Exemplary institutional execution. Corporate engagement metrics exceeded department targets by 15%, with 45 partner firms actively recruiting. High-bandwidth digital check-in operated without bottlenecks. For the upcoming Spring edition, we will expand technical booth footprints and install indoor directional QR kiosks.',
-      adminName: 'Office of Campus Administration',
-      date: 'Sept 14, 2026'
-    },
-    reviews: [
-      {
-        id: 101,
-        name: 'Maya Lin',
-        collegeName: 'Apex Institute of Technology, School of Computing',
-        mailId: 'maya.lin@apex.edu',
-        rating: 5,
-        date: 'Sept 11, 2026',
-        feedback: 'Outstanding industry turnout! The resume critique booths and direct technical interviews helped our final year cohort tremendously. The company representatives were well-prepared.'
-      },
-      {
-        id: 102,
-        name: 'Evan Wright',
-        collegeName: 'Grand Valley State University, Dept of Mechanical Eng',
-        mailId: 'evan.wright@gvsu.edu',
-        rating: 4,
-        date: 'Sept 11, 2026',
-        feedback: 'Well-organized event halls and great queue management throughout the day. It would be helpful to have a digital interactive map on mobile for faster company navigation.'
-      },
-      {
-        id: 103,
-        name: 'Chloe Price',
-        collegeName: 'Pacific Coast Arts & Tech University',
-        mailId: 'chloe.price@pacific.edu',
-        rating: 5,
-        date: 'Sept 12, 2026',
-        feedback: 'Top-notch keynote panels and employer accessibility. The badge scanning infrastructure was smooth with zero wait times at the main registration gate.'
-      },
-      {
-        id: 104,
-        name: 'Devin Cole',
-        collegeName: 'Apex Institute of Technology, Dept of Robotics',
-        mailId: 'devin.cole@apex.edu',
-        rating: 5,
-        date: 'Sept 13, 2026',
-        feedback: 'Met three autonomous robotics lab directors and secured a winter research sponsorship. Phenomenal execution by the student coordinators.'
-      }
-    ]
-  },
-  {
-    id: 2,
-    title: 'Dawn Photography Walk & Showcase',
-    club: 'Campus Photography Club',
-    date: 'Sept 25, 2026',
-    venue: 'Botanical Gardens & Central Quad',
-    overallRating: 4.7,
-    adminEventFeedback: {
-      feedback: 'Very successful community engagement and artistic showcase. Over 300 students and faculty visited the outdoor courtyard gallery. The allocated seed grant was accounted for with zero fiscal overrun. Recommendation: Provide weather-resistant canopies for the afternoon presentation segment.',
-      adminName: 'Office of Campus Administration',
-      date: 'Sept 28, 2026'
-    },
-    reviews: [
-      {
-        id: 201,
-        name: 'Max Caulfield',
-        collegeName: 'Arcadia Bay Academy of Visual Arts',
-        mailId: 'max.c@arcadia.edu',
-        rating: 5,
-        date: 'Sept 26, 2026',
-        feedback: 'The golden hour lighting in the botanical conservatory was breathtaking. The darkroom chemical developing workshop was extremely hands-on and well-instructed.'
-      },
-      {
-        id: 202,
-        name: 'David Madsen',
-        collegeName: 'Central State University, Media Studies',
-        mailId: 'd.madsen@cstate.edu',
-        rating: 4,
-        date: 'Sept 26, 2026',
-        feedback: 'Solid guidance on manual exposure metering and composition. Adding extra shade canopies in the central courtyard during noon would improve delegate comfort.'
-      },
-      {
-        id: 203,
-        name: 'Rachel Amber',
-        collegeName: 'Arcadia Bay Academy of Visual Arts',
-        mailId: 'rachel.amber@arcadia.edu',
-        rating: 5,
-        date: 'Sept 27, 2026',
-        feedback: 'Splendid curation by the student executive cabinet. The public courtyard gallery drew hundreds of campus visitors and faculty reviewers.'
-      }
-    ]
-  },
-  {
-    id: 3,
-    title: 'Inter-College Chess Blitz Championship',
-    club: 'Chess Club',
-    date: 'Aug 28, 2026',
-    venue: 'Student Union Lounge',
-    overallRating: 4.9,
-    adminEventFeedback: {
-      feedback: 'Flawless varsity fixture with punctual round arbitrations. Noise dampening protocol from the dining hall was strictly maintained. Live broadcast boards operated with 100% uptime. Approved for expanded state championship fixtures next semester.',
-      adminName: 'Office of Campus Administration',
-      date: 'Sept 01, 2026'
-    },
-    reviews: [
-      {
-        id: 301,
-        name: 'Beth Harmon',
-        collegeName: 'Kentucky State University, Dept of Mathematics',
-        mailId: 'beth.harmon@ksu.edu',
-        rating: 5,
-        date: 'Aug 29, 2026',
-        feedback: 'Flawless tournament arbitration. The digital broadcast clocks and DGT electronic boards enabled seamless spectator viewing online.'
-      },
-      {
-        id: 302,
-        name: 'Benny Watts',
-        collegeName: 'New York Metro College, Logic & Theory',
-        mailId: 'benny.watts@nymc.edu',
-        rating: 5,
-        date: 'Aug 29, 2026',
-        feedback: 'Intense competitive atmosphere and punctual round pairings. One of the cleanest Swiss system arbitrations on the collegiate circuit.'
-      },
-      {
-        id: 303,
-        name: 'Harry Beltik',
-        collegeName: 'Kentucky State University, Physical Sciences',
-        mailId: 'harry.beltik@ksu.edu',
-        rating: 4,
-        date: 'Aug 30, 2026',
-        feedback: 'Well-regulated playing hall and strict acoustic dampening from the cafeteria corridor. Very focused environment for blitz tiebreaks.'
-      }
-    ]
-  },
-  {
-    id: 4,
-    title: 'Renewable Tech & Clean Energy Seminar',
-    club: 'Green Energy Forum',
-    date: 'Aug 15, 2026',
-    venue: 'Science Block C',
-    overallRating: 4.6,
-    adminEventFeedback: {
-      feedback: 'High academic rigor and strong interdisciplinary participation across mechanical, electrical, and environmental sciences. Two student prototypes were shortlisted for research innovation grants. Time allocations for panel questions will be increased from 15 to 30 minutes in future symposiums.',
-      adminName: 'Office of Campus Administration',
-      date: 'Aug 18, 2026'
-    },
-    reviews: [
-      {
-        id: 401,
-        name: 'Nora Hall',
-        collegeName: 'State Engineering Institute, Environmental Studies',
-        mailId: 'nora.hall@sei.edu',
-        rating: 5,
-        date: 'Aug 16, 2026',
-        feedback: 'Fascinating discussions on micro-inverter reliability and battery storage integration for remote campus buildings. Superb student prototype demos.'
-      },
-      {
-        id: 402,
-        name: 'Marcus Bell',
-        collegeName: 'Metropolitan University of Tech, Electrical Eng',
-        mailId: 'marcus.bell@metrotech.edu',
-        rating: 4,
-        date: 'Aug 16, 2026',
-        feedback: 'High-caliber faculty speakers. The final panel Q&A could easily have been extended by 20 minutes as numerous students had technical questions.'
-      },
-      {
-        id: 403,
-        name: 'Elena Rostova',
-        collegeName: 'State Engineering Institute, Power Systems',
-        mailId: 'elena.r@sei.edu',
-        rating: 5,
-        date: 'Aug 17, 2026',
-        feedback: 'Inspiring pitch competition. We connected with two research professors who agreed to mentor our solar irrigation prototype.'
-      }
-    ]
-  }
-];
+import { reviewsService, EventReviewGroup } from '../../services/reviewsService';
 
 export default function EventReviews() {
   const { showToast } = useToast();
-  const [events, setEvents] = useState(() => {
-    try {
-      const saved = localStorage.getItem('unisync_event_reviews');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error(e);
-    }
-    return DEFAULT_REVIEW_EVENTS;
-  });
-
-  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [events, setEvents] = useState<EventReviewGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
+
+  const fetchReviews = async () => {
+    try {
+      setLoading(true);
+      const res = await reviewsService.getReviews();
+      setEvents(res);
+      if (res && res.length > 0 && selectedEventId === null) {
+        setSelectedEventId(res[0].id);
+      }
+    } catch (e: any) {
+      console.error('Failed to load reviews:', e);
+      showToast('Could not load reviews from server.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReviews();
+  }, []);
   
   // State for administrative event feedback editor
   const [isEditingAdminFeedback, setIsEditingAdminFeedback] = useState(false);
   const [adminFeedbackInput, setAdminFeedbackInput] = useState('');
-
-  // Persist review events whenever updated
-  useEffect(() => {
-    try {
-      localStorage.setItem('unisync_event_reviews', JSON.stringify(events));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [events]);
 
   const selectedEvent = events.find(e => e.id === selectedEventId) || null;
 

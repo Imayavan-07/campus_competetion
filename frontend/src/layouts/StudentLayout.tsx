@@ -7,7 +7,10 @@ import {
   TrophyIcon 
 } from '../components/common/Icons';
 
+import { useAuth } from '../context/AuthContext';
+
 export default function StudentLayout(): React.JSX.Element {
+  const { user } = useAuth();
   const studentSections: NavSection[] = [
     {
       title: "Overview",
@@ -31,7 +34,7 @@ export default function StudentLayout(): React.JSX.Element {
         sections={studentSections} 
       />
       <main className="main-content">
-        <Header roleLabel="Student" userName="Alex Vance" />
+        <Header roleLabel="Student" userName={user?.name || "Alex Vance"} />
         <div className="page-container">
           <Outlet />
         </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   CalendarIcon, 
@@ -11,61 +11,57 @@ import {
 } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
+import { useAuth } from '../../context/AuthContext';
+import { eventsService } from '../../services/eventsService';
 
 export default function ClubCalendar() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const currentClubName = user?.club || 'Robotics Society';
+
   const [view, setView] = useState<'monthly' | 'daily'>('monthly');
   const [activeModal, setActiveModal] = useState<string | null>(null); // 'viewEvent'
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>('OCT');
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [events, setEvents] = useState([
-    { 
-      id: 100, 
-      title: 'Annual Robotics Grand Prix 2026', 
-      date: '12', 
-      month: 'OCT', 
-      time: '02:00 PM - 08:00 PM', 
-      venue: 'Main Innovation Arena', 
-      type: 'competition',
-      attendees: 120,
-      status: 'Pending Review'
-    },
-    { 
-      id: 2, 
-      title: 'Combat Bot Engineering Workshop', 
-      date: '15', 
-      month: 'OCT', 
-      time: '10:00 AM - 04:00 PM', 
-      venue: 'Makerspace Lab 2', 
-      type: 'workshop',
-      attendees: 52,
-      status: 'Ongoing'
-    },
-    { 
-      id: 201, 
-      title: 'LiDAR Sensor Calibration Sprint', 
-      date: '20', 
-      month: 'OCT', 
-      time: '03:00 PM - 06:00 PM', 
-      venue: 'Advanced Robotics Lab', 
-      type: 'clinic',
-      attendees: 35,
-      status: 'Approved'
-    },
-    { 
-      id: 202, 
-      title: 'Robotics Guild Executive Board Review', 
-      date: '28', 
-      month: 'OCT', 
-      time: '05:00 PM - 06:30 PM', 
-      venue: 'Student Union Lounge', 
-      type: 'meeting',
-      attendees: 12,
-      status: 'Approved'
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+      const data = await eventsService.getEvents({ club: currentClubName });
+      const mapped = (data || []).map((e: any) => {
+        let dayStr = '15';
+        if (e.day) {
+          dayStr = String(e.day).padStart(2, '0');
+        } else if (e.date) {
+          const match = String(e.date).match(/\d{1,2}/);
+          if (match) dayStr = match[0].padStart(2, '0');
+        }
+        return {
+          id: e.id,
+          title: e.title,
+          date: dayStr,
+          month: (e.month || 'OCT').toUpperCase(),
+          time: e.timeSlot || e.time_slot || '10:00 AM - 04:00 PM',
+          venue: e.venue || 'Campus Auditorium',
+          type: e.category || 'competition',
+          attendees: e.attendees || 0,
+          status: e.approvalStatus || e.status || 'Approved'
+        };
+      });
+      setEvents(mapped);
+    } catch (err: any) {
+      showToast('Failed to load club calendar events', 'error');
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
+
+  useEffect(() => {
+    loadEvents();
+  }, [currentClubName]);
 
   const openDayEvent = (dayStr: string) => {
     const existing = events.find(e => e.date === dayStr && e.month === selectedMonth);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarIcon,
@@ -18,18 +18,33 @@ import {
 } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
+import { dashboardService, DashboardData } from '../../services/dashboardService';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
+  const [stats, setStats] = useState<DashboardData | null>(null);
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const res = await dashboardService.getStats();
+        if (res.data) setStats(res.data);
+      } catch (e) {
+        console.warn('Could not load dashboard stats:', e);
+      }
+    }
+    loadStats();
+  }, []);
+
   // Modals state
-  const [activeModal, setActiveModal] = useState(null); // 'registerClub'
+  const [activeModal, setActiveModal] = useState<string | null>(null); // 'registerClub'
 
   // Form states
   const [clubForm, setClubForm] = useState({ name: '', dept: 'Engineering', lead: '', email: '' });
 
-  const handleCreateClub = (e) => {
+  const handleCreateClub = (e: React.FormEvent) => {
     e.preventDefault();
     if (!clubForm.name) return;
     showToast(`Club "${clubForm.name}" registered successfully!`, 'success');

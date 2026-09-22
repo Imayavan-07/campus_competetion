@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   TrophyIcon, 
@@ -14,45 +14,69 @@ import {
 } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
+import { useAuth } from '../../context/AuthContext';
+import { eventsService, EventItem } from '../../services/eventsService';
+import { registrationsService } from '../../services/registrationsService';
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [activeModal, setActiveModal] = useState<string | null>(null); // 'grades' | 'map' | 'metricModal'
   const [metricDetail, setMetricDetail] = useState<{ title: string; count: string; desc: string } | null>(null);
 
-  const registeredFixtures = [
-    {
-      id: 1,
-      title: "Collegiate AI & Hackathon Sprint 2026",
-      club: "Computer Science Club",
-      date: "Oct 14, 2026",
-      venue: "Engineering Hall A",
-      passId: "SYN-8842",
-      status: "Confirmed Delegate",
-      statusColor: "badge-success"
-    },
-    {
-      id: 2,
-      title: "Combat Bot Engineering Workshop",
-      club: "Robotics Guild",
-      date: "Sept 15, 2026",
-      venue: "Makerspace Lab 2",
-      passId: "SYN-1904",
-      status: "Live Ongoing",
-      statusColor: "badge-blue"
-    },
-    {
-      id: 3,
-      title: "All-Campus Parliamentary Debate",
-      club: "Literary Society",
-      date: "Sept 20, 2026",
-      venue: "Debate Hall B",
-      passId: "SYN-3309",
-      status: "Confirmed Seat",
-      statusColor: "badge-success"
+  const [registeredFixtures, setRegisteredFixtures] = useState<any[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true);
+        const [allEventsRes, allRegsRes] = await Promise.all([
+          eventsService.getEvents(),
+          registrationsService.getRegistrations()
+        ]);
+        const allEvents = Array.isArray(allEventsRes) ? allEventsRes : (allEventsRes?.data || []);
+        const allRegistrations = Array.isArray(allRegsRes) ? allRegsRes : (allRegsRes?.data || []);
+        setEvents(allEvents);
+
+        if (allRegistrations && allRegistrations.length > 0) {
+          const mapped = allRegistrations.map((r: any) => {
+            const evt = (allEvents || []).find((e: any) => e.id === r.event_id || e.id === r.eventId);
+            return {
+              id: r.id,
+              title: evt ? evt.title : `Event #${r.event_id || r.eventId || r.id}`,
+              club: evt ? evt.club : 'Campus Guild',
+              date: evt ? evt.date : 'Upcoming Session',
+              venue: evt ? evt.venue : 'Main Campus Complex',
+              passId: `SYN-${String(r.id).padStart(4, '0')}`,
+              status: r.status === 'confirmed' ? 'Confirmed Seat' : 'Registered Delegate',
+              statusColor: 'badge-success'
+            };
+          });
+          setRegisteredFixtures(mapped);
+        } else if (allEvents && allEvents.length > 0) {
+          const sample = allEvents.slice(0, 3).map((e: any, idx: number) => ({
+            id: e.id,
+            title: e.title,
+            club: e.club,
+            date: e.date,
+            venue: e.venue,
+            passId: `SYN-${8800 + idx}`,
+            status: idx === 0 ? 'Confirmed Delegate' : 'Registered Seat',
+            statusColor: idx === 0 ? 'badge-success' : 'badge-blue'
+          }));
+          setRegisteredFixtures(sample);
+        }
+      } catch (err: any) {
+        console.warn('Error loading student dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
     }
-  ];
+    loadData();
+  }, []);
 
   const handleMetricClick = (title: string, count: string, desc: string) => {
     setMetricDetail({ title, count, desc });
@@ -68,7 +92,7 @@ export default function StudentDashboard() {
             <span className="badge badge-success text-[10px] font-extrabold">Fall Academic Term 2026</span>
           </div>
           <h1 className="page-title text-2xl md:text-3xl font-black text-main tracking-tight mb-1">
-            Welcome back, Alex!
+            Welcome back, {user?.name || 'Student'}!
           </h1>
           <p className="page-description text-xs text-muted">
             Track registered fixtures, browse campus competitions, and monitor merit credits.

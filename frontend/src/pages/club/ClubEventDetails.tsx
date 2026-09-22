@@ -22,13 +22,9 @@ import {
 } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
-import { 
-  getEventById, 
-  updateEventDelegates, 
-  CAMPUS_VENUES, 
-  getCustomizedEvents, 
-  saveCustomizedEvents 
-} from '../../data/eventsData';
+import { eventsService, EventItem } from '../../services/eventsService';
+import { venuesService, Venue } from '../../services/venuesService';
+import { api } from '../../services/apiClient';
 
 export default function ClubEventDetails() {
   const { id } = useParams();
@@ -39,6 +35,8 @@ export default function ClubEventDetails() {
   const [delegates, setDelegates] = useState<any[]>([]);
   const [searchDelegate, setSearchDelegate] = useState<string>('');
   const [activeModal, setActiveModal] = useState<string | null>(null); // 'addDelegate' | 'addAgenda'
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [newDelegate, setNewDelegate] = useState({
     name: '',
@@ -52,20 +50,35 @@ export default function ClubEventDetails() {
     title: ''
   });
 
-  useEffect(() => {
+  const loadEvent = async () => {
     if (!id) return;
-    const found = getEventById(id);
-    if (found) {
-      setEvent(found);
-      const initialDelegates = found.sampleDelegates || [
-        { name: 'Alex Vance', reg: '2024CS01', email: 'alex.vance@university.edu', status: 'Confirmed', checkedIn: true },
-        { name: 'Sarah Jenkins', reg: '2024EC12', email: 'sarah.j@university.edu', status: 'Confirmed', checkedIn: false },
-        { name: 'Liam O Connor', reg: '2023ME44', email: 'liam.oc@university.edu', status: 'Waitlisted', checkedIn: false },
-        { name: 'Maya Lin', reg: '2024EC14', email: 'maya.lin@university.edu', status: 'Confirmed', checkedIn: true },
-        { name: 'Devin Cole', reg: '2024RO01', email: 'devin.cole@university.edu', status: 'Confirmed', checkedIn: false }
-      ];
-      setDelegates(initialDelegates);
+    try {
+      setLoading(true);
+      const [found, allVenues] = await Promise.all([
+        eventsService.getEventById(Number(id)),
+        venuesService.getVenues()
+      ]);
+      setVenues(allVenues || []);
+      if (found) {
+        setEvent(found);
+        const initialDelegates = found.sampleDelegates || [
+          { name: 'Alex Vance', reg: '2024CS01', email: 'alex.vance@university.edu', status: 'Confirmed', checkedIn: true },
+          { name: 'Sarah Jenkins', reg: '2024EC12', email: 'sarah.j@university.edu', status: 'Confirmed', checkedIn: false },
+          { name: 'Liam O Connor', reg: '2023ME44', email: 'liam.oc@university.edu', status: 'Waitlisted', checkedIn: false },
+          { name: 'Maya Lin', reg: '2024EC14', email: 'maya.lin@university.edu', status: 'Confirmed', checkedIn: true },
+          { name: 'Devin Cole', reg: '2024RO01', email: 'devin.cole@university.edu', status: 'Confirmed', checkedIn: false }
+        ];
+        setDelegates(initialDelegates);
+      }
+    } catch (err: any) {
+      showToast('Failed to load event details from server', 'error');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    loadEvent();
   }, [id]);
 
   if (!event) {
@@ -84,10 +97,10 @@ export default function ClubEventDetails() {
   const isPastOrCompleted = event.timeframe === 'Past' || event.status === 'Past' || event.status === 'Completed';
 
   // Venue metadata
-  const venueMeta = CAMPUS_VENUES.find(v => v.name === event.venue) || {
+  const venueMeta = venues.find(v => v.name === event.venue) || {
     name: event.venue,
     capacity: 250,
-    type: 'Campus Facility'
+    facilities: 'Campus Facility'
   };
 
   // Budget calculations
@@ -126,20 +139,24 @@ export default function ClubEventDetails() {
           'Maya Lin (Student Host)'
         ];
 
-  const handleToggleCheckIn = (idx: number) => {
+  const handleToggleCheckIn = async (idx: number) => {
     const updated = [...delegates];
     updated[idx].checkedIn = !updated[idx].checkedIn;
     setDelegates(updated);
-    updateEventDelegates(event.id, updated);
-    showToast(
-      updated[idx].checkedIn 
-        ? `Checked in ${updated[idx].name} at venue portal!` 
-        : `Check-in revoked for ${updated[idx].name}`,
-      updated[idx].checkedIn ? 'success' : 'info'
-    );
+    try {
+      await eventsService.updateEvent(event.id, { sampleDelegates: updated });
+      showToast(
+        updated[idx].checkedIn 
+          ? `Checked in ${updated[idx].name} at venue portal!` 
+          : `Check-in revoked for ${updated[idx].name}`,
+        updated[idx].checkedIn ? 'success' : 'info'
+      );
+    } catch (err: any) {
+      showToast('Failed to update check-in status on server', 'error');
+    }
   };
 
-  const handleAddDelegate = (e: React.FormEvent) => {
+  const handleAddDelegate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDelegate.name.trim() || !newDelegate.reg.trim()) {
       showToast('Please enter delegate name and registration ID', 'error');
@@ -151,28 +168,30 @@ export default function ClubEventDetails() {
       { ...newDelegate, checkedIn: false }
     ];
     setDelegates(updated);
-    updateEventDelegates(event.id, updated);
-    showToast(`Delegate ${newDelegate.name} enrolled into fixture!`, 'success');
-    setActiveModal(null);
-    setNewDelegate({ name: '', reg: '', email: '', status: 'Confirmed' });
+    try {
+      await eventsService.updateEvent(event.id, { sampleDelegates: updated, attendees: updated.length });
+      showToast(`Delegate ${newDelegate.name} enrolled into fixture!`, 'success');
+      setActiveModal(null);
+      setNewDelegate({ name: '', reg: '', email: '', status: 'Confirmed' });
+    } catch (err: any) {
+      showToast('Failed to enroll delegate on server', 'error');
+    }
   };
 
-  const handleAddAgendaItem = (e: React.FormEvent) => {
+  const handleAddAgendaItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAgenda.title.trim()) return;
 
     const updatedAgenda = [...(event.agenda || []), newAgenda];
-    const custom = getCustomizedEvents();
-    custom[event.id] = {
-      ...(custom[event.id] || {}),
-      agenda: updatedAgenda
-    };
-    saveCustomizedEvents(custom);
-    setEvent({ ...event, agenda: updatedAgenda });
-
-    showToast(`Added agenda milestone: "${newAgenda.title}"`, 'success');
-    setActiveModal(null);
-    setNewAgenda({ time: '04:00 PM', title: '' });
+    try {
+      await eventsService.updateEvent(event.id, { agenda: updatedAgenda });
+      setEvent({ ...event, agenda: updatedAgenda });
+      showToast(`Added agenda milestone: "${newAgenda.title}"`, 'success');
+      setActiveModal(null);
+      setNewAgenda({ time: '04:00 PM', title: '' });
+    } catch (err: any) {
+      showToast('Failed to update event agenda on server', 'error');
+    }
   };
 
   const filteredDelegates = delegates.filter(d => 
@@ -384,6 +403,50 @@ export default function ClubEventDetails() {
               ))}
             </div>
           </div>
+
+          {/* Event Poster and Official Rulebook Attachments */}
+          {(event.poster_url || event.guidelines_pdf_url) && (
+            <div className="pt-4 border-t border-gray-100 dark:border-neutral-800 flex flex-wrap gap-4 items-center">
+              {event.poster_url && (
+                <div className="flex items-center gap-3 p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-gray-100 dark:border-neutral-800">
+                  <img 
+                    src={event.poster_url.startsWith('http') ? event.poster_url : `${import.meta.env.VITE_STORAGE_URL || 'http://localhost:5000'}${event.poster_url}`} 
+                    alt="Poster" 
+                    className="w-12 h-12 object-cover rounded-xl border border-gray-200 dark:border-neutral-700" 
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-main block">Official Promotional Poster</span>
+                    <a 
+                      href={event.poster_url.startsWith('http') ? event.poster_url : `${import.meta.env.VITE_STORAGE_URL || 'http://localhost:5000'}${event.poster_url}`} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="text-[11px] text-primary hover:underline font-semibold"
+                    >
+                      View Full Resolution →
+                    </a>
+                  </div>
+                </div>
+              )}
+              {event.guidelines_pdf_url && (
+                <div className="flex items-center gap-3 p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-gray-100 dark:border-neutral-800">
+                  <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center font-bold text-xs">
+                    PDF
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-main block">Official Competition Guidelines</span>
+                    <a 
+                      href={event.guidelines_pdf_url.startsWith('http') ? event.guidelines_pdf_url : `${import.meta.env.VITE_STORAGE_URL || 'http://localhost:5000'}${event.guidelines_pdf_url}`} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="text-[11px] text-rose-600 dark:text-rose-400 hover:underline font-semibold"
+                    >
+                      Download Document →
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Event Agenda & Milestones */}
           <div className="pt-4 border-t border-gray-100 dark:border-neutral-800">

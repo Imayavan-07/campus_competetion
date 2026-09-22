@@ -14,36 +14,33 @@ import {
   XMarkIcon
 } from '../../components/common/Icons';
 import { useToast } from '../../components/common/Toast';
-
-// Default list of club coordinators in case none found in localStorage
-const DEFAULT_COORDINATORS = [
-  { id: 1, name: 'Alice Johnson', email: 'alice@university.edu', dept: 'Computer Science' },
-  { id: 2, name: 'Bob Smith', email: 'bob@university.edu', dept: 'Electronics' },
-  { id: 4, name: 'Diana Prince', email: 'diana@university.edu', dept: 'Civil Engineering' },
-  { id: 6, name: 'Fiona Gallagher', email: 'fiona@university.edu', dept: 'Data Science' },
-  { id: 7, name: 'George Miller', email: 'george@university.edu', dept: 'Mechanical Engineering' }
-];
+import { clubsService } from '../../services/clubsService';
+import { membersService } from '../../services/membersService';
+import { uploadService } from '../../services/uploadService';
 
 export default function AddClub() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
   // Load available club coordinators
-  const [coordinators, setCoordinators] = useState(DEFAULT_COORDINATORS);
+  const [coordinators, setCoordinators] = useState<any[]>([]);
 
   useEffect(() => {
-    try {
-      const savedMembers = localStorage.getItem('unisync_members');
-      if (savedMembers) {
-        const parsed = JSON.parse(savedMembers);
-        const coords = parsed.filter(m => m.role === 'Club Coordinator');
-        if (coords.length > 0) {
-          setCoordinators(coords);
+    async function loadCoordinators() {
+      try {
+        const res = await membersService.getMembers({ role: 'club' });
+        if (res.data && res.data.length > 0) {
+          setCoordinators(res.data);
+          setFormData((prev) => ({
+            ...prev,
+            coordinator: res.data[0]?.name || 'Alice Johnson',
+          }));
         }
+      } catch (e) {
+        console.warn('Could not load coordinators from server:', e);
       }
-    } catch (e) {
-      console.warn('Could not read saved members', e);
     }
+    loadCoordinators();
   }, []);
 
   // Form State
@@ -97,17 +94,21 @@ export default function AddClub() {
     }
 
     setLogoFileName(file.name);
+    setLogoFile(file);
     const reader = new FileReader();
     reader.onloadend = () => {
       setLogoPreview(reader.result);
-      showToast('Logo image uploaded successfully!', 'success');
+      showToast('Logo image selected successfully!', 'success');
     };
     reader.readAsDataURL(file);
   };
 
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+
   const handleRemoveLogo = () => {
     setLogoPreview(null);
     setLogoFileName('');
+    setLogoFile(null);
   };
 
   // Dynamic Executive Positions
@@ -145,7 +146,7 @@ export default function AddClub() {
   // Get selected coordinator's department
   const selectedCoordinatorObj = coordinators.find(c => c.name === formData.coordinator) || coordinators[0];
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name.trim()) {
@@ -153,59 +154,45 @@ export default function AddClub() {
       return;
     }
     if (!formData.clubEmail.trim()) {
-      showToast('Official club email is required', 'warning');
+      showToast('Club official email is required', 'warning');
       return;
     }
     if (!formData.presidentName.trim()) {
-      showToast('Student President name is required', 'warning');
-      return;
-    }
-    if (!formData.presidentEmail.trim()) {
-      showToast('President email is required', 'warning');
-      return;
-    }
-    if (!formData.presidentPhone.trim()) {
-      showToast('President contact phone number is required', 'warning');
+      showToast('President full name is required', 'warning');
       return;
     }
 
-    const newClub = {
-      id: Date.now(),
-      name: formData.name.trim(),
-      dept: formData.dept,
-      email: formData.clubEmail.trim(),
-      members: Number(formData.members) || 10,
-      events: 0,
-      status: 'Active',
-      description: formData.description,
-      logo: logoPreview || null,
-      coordinator: formData.coordinator,
-      coordinatorDept: selectedCoordinatorObj?.dept || formData.dept,
-      president: formData.presidentName.trim(),
-      presidentEmail: formData.presidentEmail.trim(),
-      presidentPhone: formData.presidentPhone.trim(),
-      presidentYear: formData.presidentYear,
-      vicePresident: {
-        name: formData.vpName.trim(),
-        email: formData.vpEmail.trim(),
-        phone: formData.vpPhone.trim(),
-        year: formData.vpYear
-      },
-      executivePositions: positions.filter(p => p.title.trim() !== ''),
-      registeredAt: new Date().toISOString().split('T')[0]
-    };
-
-    // Save to localStorage
     try {
-      const stored = localStorage.getItem('unisync_clubs');
-      const existing = stored ? JSON.parse(stored) : [];
-      localStorage.setItem('unisync_clubs', JSON.stringify([newClub, ...existing]));
-    } catch (err) {
-      console.error('Error persisting club', err);
-    }
+      let uploadedLogoUrl: string | null = null;
+      if (logoFile) {
+        const uploadRes = await uploadService.uploadImage(logoFile);
+        if (uploadRes.data?.url) {
+          uploadedLogoUrl = uploadRes.data.url;
+        }
+      }
 
-    showToast(`Club "${formData.name}" has been registered successfully!`, 'success');
-    navigate('/admin/clubs');
+      const newClubData = {
+        name: formData.name.trim(),
+        dept: formData.dept,
+        email: formData.clubEmail.trim(),
+        members_count: Number(formData.members) || 10,
+        events_count: 0,
+        description: formData.description,
+        logo_url: uploadedLogoUrl,
+        coordinator: formData.coordinator,
+        president: formData.presidentName.trim(),
+        phone: formData.presidentPhone.trim(),
+        category: formData.dept,
+      };
+
+      await clubsService.createClub(newClubData);
+
+      showToast(`Club "${formData.name}" has been registered successfully!`, 'success');
+      navigate('/admin/clubs');
+    } catch (err: any) {
+      console.error('Error registering club:', err);
+      showToast(err.message || 'Failed to register club on server.', 'error');
+    }
   };
 
   return (

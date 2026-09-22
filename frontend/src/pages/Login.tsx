@@ -13,39 +13,39 @@ import {
   SparklesIcon
 } from '../components/common/Icons';
 
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/common/Toast';
+
 export default function Login() {
-  const [email, setEmail] = useState('student@university.edu');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [activePersona, setActivePersona] = useState('student');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const { showToast } = useToast();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const lower = email.toLowerCase();
-    if (lower.includes('admin')) {
-      navigate('/admin');
-    } else if (lower.includes('club') || lower.includes('coord')) {
-      navigate('/club');
-    } else {
-      navigate('/student');
+    if (!email.trim() || !password.trim()) {
+      showToast('Please enter both email and password.', 'error');
+      return;
     }
-  };
-
-  const handleSelectPersona = (role) => {
-    setActivePersona(role);
-    if (role === 'admin') {
-      setEmail('admin@university.edu');
-      setPassword('admin_pass_2026');
-      navigate('/admin');
-    } else if (role === 'club') {
-      setEmail('club.lead@university.edu');
-      setPassword('club_pass_2026');
-      navigate('/club');
-    } else {
-      setEmail('student@university.edu');
-      setPassword('student_pass_2026');
-      navigate('/student');
+    setLoading(true);
+    try {
+      const user = await login(email, password);
+      showToast(`Authentication successful. Welcome, ${user.name}!`, 'success');
+      if (user.role === 'admin') {
+        navigate('/admin');
+      } else if (user.role === 'club') {
+        navigate('/club');
+      } else {
+        navigate('/student');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Login failed. Please verify your credentials.', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -215,7 +215,7 @@ export default function Login() {
               </div>
               <h2 className="auth-card-title">Sign In to UniSync</h2>
               <p className="auth-card-subtitle">
-                Authenticate with university ID or select a verified demo persona.
+                Enter your official university email and password to access your portal.
               </p>
             </div>
 
@@ -279,46 +279,24 @@ export default function Login() {
               </div>
 
               {/* Enter Portal Submit Button */}
-              <button type="submit" className="auth-submit-btn">
-                <span>Enter University Portal</span>
+              <button type="submit" className="auth-submit-btn" disabled={loading}>
+                <span>{loading ? 'Verifying Credentials...' : 'Enter University Portal'}</span>
                 <ArrowRightIcon className="w-4 h-4" />
               </button>
             </form>
 
-            {/* Quick-Switch Persona Dock */}
-            <div className="auth-persona-dock">
-              <p className="persona-dock-label">
-                Instant Demo Personas
-              </p>
-              <div className="persona-buttons-grid">
-                <button
-                  type="button"
-                  onClick={() => handleSelectPersona('admin')}
-                  className={`persona-btn btn-admin ${activePersona === 'admin' ? 'ring-1 ring-blue-500' : ''}`}
-                  title="Authenticate as Campus Chief Administrator"
-                >
-                  <span className="font-extrabold text-slate-800">Chief Admin</span>
-                  <span className="persona-role-tag text-blue-600">Governance</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSelectPersona('student')}
-                  className={`persona-btn btn-student ${activePersona === 'student' ? 'ring-1 ring-emerald-500' : ''}`}
-                  title="Authenticate as University Student"
-                >
-                  <span className="font-extrabold text-slate-800">Student</span>
-                  <span className="persona-role-tag text-emerald-600">Competitions</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSelectPersona('club')}
-                  className={`persona-btn btn-club ${activePersona === 'club' ? 'ring-1 ring-amber-500' : ''}`}
-                  title="Authenticate as Club Coordinator / Executive"
-                >
-                  <span className="font-extrabold text-slate-800">Club Lead</span>
-                  <span className="persona-role-tag text-amber-600">Operations</span>
-                </button>
+            {/* Enterprise Security & Access Footer */}
+            <div className="mt-6 pt-4 border-t border-slate-200/60 dark:border-neutral-800/60 flex flex-col gap-2">
+              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-neutral-400">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <ShieldIcon className="w-3.5 h-3.5 text-blue-600" />
+                  <span>256-Bit SSL Encrypted Portal</span>
+                </div>
+                <span className="font-semibold text-slate-600 dark:text-neutral-300">UniSync Auth v1.0</span>
               </div>
+              <p className="text-[11px] text-slate-400 dark:text-neutral-500 leading-tight">
+                Enter your assigned university email and secure password. Contact the Department Administrator for credential re-issues.
+              </p>
             </div>
 
           </div>

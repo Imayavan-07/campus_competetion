@@ -1,70 +1,79 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TrophyIcon, SearchIcon, ArrowRightIcon, UsersIcon, CheckIcon } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
+import { useAuth } from '../../context/AuthContext';
+import { eventsService, EventItem } from '../../services/eventsService';
+import { registrationsService } from '../../services/registrationsService';
 
 export default function StudentCompetitions() {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
-  const [activeModal, setActiveModal] = useState(null); // 'register' | 'guidelines'
-  const [selectedComp, setSelectedComp] = useState(null);
+  const [activeModal, setActiveModal] = useState<'register' | 'guidelines' | null>(null);
+  const [selectedComp, setSelectedComp] = useState<any>(null);
+  const [competitions, setCompetitions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [regForm, setRegForm] = useState({
     teamName: '',
     track: 'AI & Web Agents',
-    members: 'Alex Vance (Lead), Maya Lin',
+    members: user?.name || 'Student Participant',
     github: ''
   });
 
-  const competitions = [
-    {
-      id: 1,
-      title: "Annual Hackathon Sprint 2026",
-      club: "Computer Science Society",
-      date: "Oct 12 - 14, 2026",
-      prize: "$5,000",
-      tags: ['Coding', 'Web3', 'AI'],
-      desc: "Build full-stack autonomous AI applications and distributed web tools in 36 continuous hours."
-    },
-    {
-      id: 2,
-      title: "All-Campus Debate Championship",
-      club: "Literary & Oratory Guild",
-      date: "Sept 20, 2026",
-      prize: "$1,500",
-      tags: ['Debate', 'Speaking'],
-      desc: "Parliamentary style collegiate debate covering future tech ethics, global trade, and policy."
-    },
-    {
-      id: 3,
-      title: "RoboWars: Steel Arena Combat",
-      club: "Robotics Club",
-      date: "Oct 05, 2026",
-      prize: "$3,000",
-      tags: ['Hardware', 'Combat'],
-      desc: "Design and pilot 15kg combat bots in custom hazardous battle rings with live scoring."
-    },
-    {
-      id: 4,
-      title: "Campus Esports Invitational",
-      club: "Gaming Syndicate",
-      date: "Oct 22, 2026",
-      prize: "$2,000",
-      tags: ['Esports', 'Multiplayer'],
-      desc: "5v5 tactical tournament broadcasted live across university streaming auditoriums."
+  const loadCompetitions = async () => {
+    try {
+      setLoading(true);
+      const data = await eventsService.getEvents();
+      const mapped = (data || []).map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        club: e.club || 'Campus Organization',
+        date: e.date || `${e.month || 'Oct'} ${e.day || '15'}, 2026`,
+        prize: e.budget ? `$${parseInt(String(e.budget).replace(/[^0-9]/g, '')) > 0 ? (parseInt(String(e.budget).replace(/[^0-9]/g, '')) * 0.4).toFixed(0) : '2,000'}` : '$2,500',
+        tags: e.aiSummary?.tags && e.aiSummary.tags.length > 0 ? e.aiSummary.tags : ['Competition', 'Collegiate', 'Tech'],
+        desc: e.description || 'Join fellow university delegates in this competition fixture.',
+        poster_url: e.poster_url,
+        guidelines_pdf_url: e.guidelines_pdf_url
+      }));
+      setCompetitions(mapped);
+    } catch (err: any) {
+      showToast('Failed to load competitions from server', 'error');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  useEffect(() => {
+    loadCompetitions();
+  }, []);
 
   const filtered = competitions.filter(c => {
     return c.title.toLowerCase().includes(search.toLowerCase()) || c.club.toLowerCase().includes(search.toLowerCase());
   });
 
-  const handleRegisterSubmit = (e) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regForm.teamName) return;
-    showToast(`Team "${regForm.teamName}" registered for ${selectedComp.title}!`, 'success');
-    setActiveModal(null);
-    setRegForm({ teamName: '', track: 'AI & Web Agents', members: 'Alex Vance (Lead), Maya Lin', github: '' });
+    if (!regForm.teamName || !selectedComp) return;
+    try {
+      await registrationsService.register({
+        event_id: selectedComp.id,
+        delegate_name: user?.name || regForm.members.split(',')[0].trim() || 'Student Delegate',
+        team_name: regForm.teamName,
+        email: user?.email || 'student@university.edu',
+        custom_responses: {
+          track: regForm.track,
+          members: regForm.members,
+          github: regForm.github
+        }
+      });
+      showToast(`Team "${regForm.teamName}" registered for ${selectedComp.title}!`, 'success');
+      setActiveModal(null);
+      setRegForm({ teamName: '', track: 'AI & Web Agents', members: user?.name || 'Student Participant', github: '' });
+    } catch (err: any) {
+      showToast('Registration failed. Please verify credentials.', 'error');
+    }
   };
 
   return (

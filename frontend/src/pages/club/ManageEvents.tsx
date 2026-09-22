@@ -19,33 +19,44 @@ import {
 } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
-import { 
-  CAMPUS_VENUES, 
-  getStoredApprovals,
-  getCustomizedEvents,
-  saveCustomizedEvents,
-  getAllClubEvents,
-  getEventById
-} from '../../data/eventsData';
+import { useAuth } from '../../context/AuthContext';
+import { eventsService, EventItem } from '../../services/eventsService';
+import { venuesService, Venue } from '../../services/venuesService';
 
 export default function ManageEvents() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const currentClubName = user?.club || 'Robotics Society';
+
   const [activeModal, setActiveModal] = useState<string | null>(null); // 'edit' | 'roster' | 'cancel'
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const loadEvents = () => {
-    const all = getAllClubEvents();
-    setEvents(all);
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+      const [allEvts, allVenues] = await Promise.all([
+        eventsService.getEvents({ club: currentClubName }),
+        venuesService.getVenues()
+      ]);
+      setEvents(allEvts || []);
+      setVenues(allVenues || []);
+    } catch (err: any) {
+      showToast('Failed to load events from server', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     loadEvents();
-  }, []);
+  }, [currentClubName]);
 
   const filteredEvents = events.filter(event => {
     const matchesSearch = (event.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -54,42 +65,43 @@ export default function ManageEvents() {
     if (!matchesSearch) return false;
     if (filterStatus === 'all') return true;
     if (filterStatus === 'approved') return event.approvalStatus === 'Approved' || event.status === 'Approved' || event.status === 'Active';
-    if (filterStatus === 'pending') return event.status === 'Pending Review' || event.status === 'Pending Approval';
-    if (filterStatus === 'past') return event.timeframe === 'Past' || event.status === 'Past';
+    if (filterStatus === 'pending') return event.status === 'Pending Review' || event.status === 'Pending Approval' || event.approvalStatus === 'Pending';
+    if (filterStatus === 'past') return event.timeframe === 'Past' || event.status === 'Past' || event.status === 'Completed';
     return true;
   });
 
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEvent) return;
 
-    const custom = getCustomizedEvents();
-    custom[selectedEvent.id] = {
-      ...(custom[selectedEvent.id] || {}),
-      title: selectedEvent.title,
-      venue: selectedEvent.venue,
-      budget: selectedEvent.budget,
-      status: selectedEvent.status
-    };
-    saveCustomizedEvents(custom);
-
-    showToast(`Updated parameters for "${selectedEvent.title}"!`, 'success');
-    setActiveModal(null);
-    loadEvents();
+    try {
+      await eventsService.updateEvent(selectedEvent.id, {
+        title: selectedEvent.title,
+        venue: selectedEvent.venue,
+        budget: selectedEvent.budget,
+        status: selectedEvent.status
+      });
+      showToast(`Updated parameters for "${selectedEvent.title}"!`, 'success');
+      setActiveModal(null);
+      loadEvents();
+    } catch (err: any) {
+      showToast('Failed to update event', 'error');
+    }
   };
 
-  const handleCancelConfirm = () => {
+  const handleCancelConfirm = async () => {
     if (!selectedEvent) return;
-    const custom = getCustomizedEvents();
-    custom[selectedEvent.id] = {
-      ...(custom[selectedEvent.id] || {}),
-      status: 'Cancelled',
-      approvalStatus: 'Cancelled'
-    };
-    saveCustomizedEvents(custom);
-    showToast(`Cancelled fixture: "${selectedEvent.title}"`, 'error');
-    setActiveModal(null);
-    loadEvents();
+    try {
+      await eventsService.updateEvent(selectedEvent.id, {
+        status: 'Cancelled',
+        approvalStatus: 'Cancelled'
+      });
+      showToast(`Cancelled fixture: "${selectedEvent.title}"`, 'error');
+      setActiveModal(null);
+      loadEvents();
+    } catch (err: any) {
+      showToast('Failed to cancel event', 'error');
+    }
   };
 
   return (
@@ -388,7 +400,7 @@ export default function ManageEvents() {
                 value={selectedEvent.venue}
                 onChange={(e) => setSelectedEvent({ ...selectedEvent, venue: e.target.value })}
               >
-                {CAMPUS_VENUES.map(v => (
+                {venues.map(v => (
                   <option key={v.id} value={v.name}>{v.name} (Cap: {v.capacity})</option>
                 ))}
               </select>

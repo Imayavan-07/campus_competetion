@@ -12,7 +12,10 @@ import {
   DocumentTextIcon
 } from '../components/common/Icons';
 
+import { useAuth } from '../context/AuthContext';
+
 export default function ClubLayout(): React.JSX.Element {
+  const { user } = useAuth();
   const clubSections: NavSection[] = [
     {
       title: "Navigation",
@@ -36,7 +39,7 @@ export default function ClubLayout(): React.JSX.Element {
         sections={clubSections} 
       />
       <main className="main-content">
-        <Header roleLabel="Club Executive" userName="Robotics Society" />
+        <Header roleLabel="Club Executive" userName={user?.assigned_club || user?.name || "Robotics Society"} />
         <div className="page-container">
           <Outlet />
         </div>

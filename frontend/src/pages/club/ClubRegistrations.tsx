@@ -20,11 +20,8 @@ import {
 } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
-import { 
-  getAllClubEvents, 
-  getEventById, 
-  updateEventDelegates 
-} from '../../data/eventsData';
+import { useAuth } from '../../context/AuthContext';
+import { eventsService, EventItem } from '../../services/eventsService';
 
 export interface DelegateItem {
   name: string;
@@ -40,10 +37,13 @@ export default function ClubRegistrations(): React.JSX.Element {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const currentClubName = user?.club || 'Robotics Society';
 
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   // Filter tabs for the Event Cards selector
   const [eventFilter, setEventFilter] = useState<'all' | 'upcoming' | 'past'>('all');
@@ -69,27 +69,33 @@ export default function ClubRegistrations(): React.JSX.Element {
     status: 'Confirmed'
   });
 
-  const loadAllEvents = () => {
-    const all = getAllClubEvents();
-    setEvents(all);
+  const loadAllEvents = async () => {
+    try {
+      setLoading(true);
+      const all = await eventsService.getEvents({ club: currentClubName });
+      setEvents(all || []);
 
-    // If param provided, select that event; otherwise default to the first event
-    const paramId = searchParams.get('eventId');
-    const targetId = paramId ? Number(paramId) : (all.length > 0 ? all[0].id : null);
-    if (targetId) {
-      setSelectedEventId(targetId);
-      const found = getEventById(targetId);
-      setSelectedEvent(found);
+      const paramId = searchParams.get('eventId');
+      const targetId = paramId ? Number(paramId) : (all && all.length > 0 ? all[0].id : null);
+      if (targetId) {
+        setSelectedEventId(targetId);
+        const found = all?.find(e => e.id === targetId) || null;
+        setSelectedEvent(found);
+      }
+    } catch (err: any) {
+      showToast('Failed to load registrations and events from server', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     loadAllEvents();
-  }, [searchParams]);
+  }, [searchParams, currentClubName]);
 
   const handleSelectEvent = (id: number) => {
     setSelectedEventId(id);
-    const found = getEventById(id);
+    const found = events.find(e => e.id === id) || null;
     setSelectedEvent(found);
 
     // Smooth scroll down to the realtime roster section
@@ -120,7 +126,7 @@ export default function ClubRegistrations(): React.JSX.Element {
   const currentDelegates: DelegateItem[] = selectedEvent?.sampleDelegates || [];
 
   // 1-Click Check-in Toggle
-  const handleToggleCheckIn = (indexInFiltered: number, originalDelegate: DelegateItem) => {
+  const handleToggleCheckIn = async (indexInFiltered: number, originalDelegate: DelegateItem) => {
     if (!selectedEvent) return;
 
     const updated = currentDelegates.map(d => {
@@ -130,21 +136,25 @@ export default function ClubRegistrations(): React.JSX.Element {
       return d;
     });
 
-    const refreshed = updateEventDelegates(selectedEvent.id, updated);
-    setSelectedEvent(refreshed);
-    // Refresh events list
-    setEvents(getAllClubEvents());
+    try {
+      await eventsService.updateEvent(selectedEvent.id, { sampleDelegates: updated });
+      const refreshed = { ...selectedEvent, sampleDelegates: updated };
+      setSelectedEvent(refreshed);
+      setEvents(prev => prev.map(e => e.id === selectedEvent.id ? refreshed : e));
 
-    showToast(
-      !originalDelegate.checkedIn
-        ? `Accreditation verified for ${originalDelegate.name} (Checked In)`
-        : `Check-in revoked for ${originalDelegate.name}`,
-      !originalDelegate.checkedIn ? 'success' : 'info'
-    );
+      showToast(
+        !originalDelegate.checkedIn
+          ? `Accreditation verified for ${originalDelegate.name} (Checked In)`
+          : `Check-in revoked for ${originalDelegate.name}`,
+        !originalDelegate.checkedIn ? 'success' : 'info'
+      );
+    } catch (err: any) {
+      showToast('Failed to update delegate check-in status on server', 'error');
+    }
   };
 
   // Manual Enroll Delegate
-  const handleEnrollDelegate = (e: React.FormEvent) => {
+  const handleEnrollDelegate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDelegate.name.trim() || !newDelegate.reg.trim()) {
       showToast('Please enter delegate full name and registration ID!', 'error');
@@ -163,19 +173,24 @@ export default function ClubRegistrations(): React.JSX.Element {
     };
 
     const updated = [delegateObj, ...currentDelegates];
-    const refreshed = updateEventDelegates(selectedEvent.id, updated);
-    setSelectedEvent(refreshed);
-    setEvents(getAllClubEvents());
+    try {
+      await eventsService.updateEvent(selectedEvent.id, { sampleDelegates: updated });
+      const refreshed = { ...selectedEvent, sampleDelegates: updated, attendees: updated.length };
+      setSelectedEvent(refreshed);
+      setEvents(prev => prev.map(e => e.id === selectedEvent.id ? refreshed : e));
 
-    setIsEnrollModalOpen(false);
-    setNewDelegate({
-      name: '',
-      reg: '',
-      email: '',
-      track: 'Autonomous Systems',
-      status: 'Confirmed'
-    });
-    showToast(`Delegate ${delegateObj.name} successfully registered with Pass ${ticketId}!`, 'success');
+      setIsEnrollModalOpen(false);
+      setNewDelegate({
+        name: '',
+        reg: '',
+        email: '',
+        track: 'Autonomous Systems',
+        status: 'Confirmed'
+      });
+      showToast(`Delegate ${delegateObj.name} successfully registered with Pass ${ticketId}!`, 'success');
+    } catch (err: any) {
+      showToast('Failed to enroll delegate on server', 'error');
+    }
   };
 
   // Export CSV for a specific event or currently selected event

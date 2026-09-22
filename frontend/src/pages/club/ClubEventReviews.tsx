@@ -16,36 +16,47 @@ import {
   CurrencyDollarIcon
 } from '../../components/common/Icons';
 import { useToast } from '../../components/common/Toast';
-import { getStoredReviews, saveStoredReviews, saveClubOrganizerReply } from '../../data/eventsData';
+import { useAuth } from '../../context/AuthContext';
+import { reviewsService, ReviewGroup } from '../../services/reviewsService';
 
 export default function ClubEventReviews() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const currentClubName = user?.club || 'Robotics Society';
 
   const urlEventId = searchParams.get('eventId');
-  const [reviewEvents, setReviewEvents] = useState<any[]>([]);
+  const [reviewEvents, setReviewEvents] = useState<ReviewGroup[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<number>(urlEventId ? Number(urlEventId) : 1);
   const [searchFeedback, setSearchFeedback] = useState<string>('');
   const [ratingFilter, setRatingFilter] = useState<number | 'all'>('all');
+  const [loading, setLoading] = useState(true);
 
   // Organizer Reply state
   const [isEditingReply, setIsEditingReply] = useState<boolean>(false);
   const [replyInput, setReplyInput] = useState<string>('');
 
-  const loadReviews = () => {
-    const data = getStoredReviews();
-    setReviewEvents(data);
-    if (urlEventId && data.find((e: any) => e.id === Number(urlEventId))) {
-      setSelectedEventId(Number(urlEventId));
-    } else if (data.length > 0 && !data.find((e: any) => e.id === selectedEventId)) {
-      setSelectedEventId(data[0].id);
+  const loadReviews = async () => {
+    try {
+      setLoading(true);
+      const data = await reviewsService.getReviews();
+      setReviewEvents(data || []);
+      if (urlEventId && data.find((e: any) => e.id === Number(urlEventId))) {
+        setSelectedEventId(Number(urlEventId));
+      } else if (data && data.length > 0 && !data.find((e: any) => e.id === selectedEventId)) {
+        setSelectedEventId(data[0].id);
+      }
+    } catch (err: any) {
+      showToast('Failed to load reviews from server', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     loadReviews();
-  }, []);
+  }, [urlEventId]);
 
   const selectedEvent = reviewEvents.find(e => e.id === selectedEventId) || reviewEvents[0];
 
@@ -66,16 +77,21 @@ export default function ClubEventReviews() {
     );
   }
 
-  const handleSaveOrganizerReply = () => {
+  const handleSaveOrganizerReply = async () => {
     if (!replyInput.trim()) {
       showToast('Please enter an organizer reply before saving', 'error');
       return;
     }
 
-    const updated = saveClubOrganizerReply(selectedEvent.id, replyInput.trim(), 'Robotics Guild Executive');
-    setReviewEvents(updated);
-    setIsEditingReply(false);
-    showToast('Official Club Organizer response published!', 'success');
+    try {
+      const respondent = user?.name ? `${user.name} (${currentClubName})` : `${currentClubName} Executive`;
+      const updated = await reviewsService.submitOrganizerReply(selectedEvent.id, replyInput.trim(), respondent);
+      setReviewEvents(prev => prev.map(e => e.id === selectedEvent.id ? { ...e, organizerReply: updated } : e));
+      setIsEditingReply(false);
+      showToast('Official Club Organizer response published!', 'success');
+    } catch (err: any) {
+      showToast('Failed to submit organizer reply to server', 'error');
+    }
   };
 
   const reviewsList = selectedEvent.reviews || [];

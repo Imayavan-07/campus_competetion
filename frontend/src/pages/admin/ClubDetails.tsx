@@ -18,46 +18,31 @@ import {
 } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
-
-const DEFAULT_CLUBS = [
-  { id: 1, name: 'Campus Photography Club', dept: 'Arts & Culture', members: 45, events: 3, president: 'Evan Wright', presidentEmail: 'evan.wright@university.edu', presidentPhone: '+1 (555) 234-8765', presidentYear: '3rd Year', coordinator: 'Alice Johnson', coordinatorDept: 'Computer Science', coordinatorEmail: 'alice.johnson@university.edu', coordinatorPhone: '+1 (555) 342-8910', email: 'photography@university.edu', description: 'The premier student creative photography guild dedicated to visual journalism, darkroom development, and campus exhibitions.' },
-  { id: 2, name: 'Robotics Society', dept: 'Engineering', members: 120, events: 1, president: 'Jane Doe', presidentEmail: 'jane.doe@university.edu', presidentPhone: '+1 (555) 345-6789', presidentYear: '4th Year', coordinator: 'Bob Smith', coordinatorDept: 'Electronics', coordinatorEmail: 'bob.smith@university.edu', coordinatorPhone: '+1 (555) 678-1290', email: 'robotics@university.edu', description: 'Autonomous systems design, battle-bot fabrication, and varsity engineering preparation team.' },
-  { id: 3, name: 'Debate & Oratory Team', dept: 'Arts & Culture', members: 30, events: 5, president: 'Michael Scott', presidentEmail: 'michael.scott@university.edu', presidentPhone: '+1 (555) 456-7890', presidentYear: '3rd Year', coordinator: 'Alice Johnson', coordinatorDept: 'Computer Science', coordinatorEmail: 'alice.johnson@university.edu', coordinatorPhone: '+1 (555) 342-8910', email: 'debate@university.edu', description: 'Parliamentary and policy debate society hosting intercollegiate speech tournaments and civic forums.' },
-  { id: 4, name: 'Quantum & Chess Guild', dept: 'Science', members: 25, events: 2, president: 'Beth Harmon', presidentEmail: 'beth.harmon@university.edu', presidentPhone: '+1 (555) 567-8901', presidentYear: '2nd Year', coordinator: 'Fiona Gallagher', coordinatorDept: 'Data Science', coordinatorEmail: 'fiona.gallagher@university.edu', coordinatorPhone: '+1 (555) 456-7890', email: 'chess@university.edu', description: 'Strategic analysis, blitz tournament organization, and quantum computation discussion seminars.' },
-  { id: 5, name: 'Collegiate Esports Society', dept: 'Sports', members: 88, events: 4, president: 'Tenzing Norgay', presidentEmail: 'tenzing@university.edu', presidentPhone: '+1 (555) 678-9012', presidentYear: '3rd Year', coordinator: 'George Miller', coordinatorDept: 'Mechanical Engineering', coordinatorEmail: 'george.miller@university.edu', coordinatorPhone: '+1 (555) 789-0123', email: 'esports@university.edu', description: 'Varsity gaming society organizing campus LAN competitions, strategy coaching, and collegiate broadcasts.' },
-  { id: 6, name: 'Renewable Energies Club', dept: 'Engineering', members: 54, events: 2, president: 'Claire Bennett', presidentEmail: 'claire@university.edu', presidentPhone: '+1 (555) 789-0123', presidentYear: '4th Year', coordinator: 'Diana Prince', coordinatorDept: 'Civil Engineering', coordinatorEmail: 'diana.prince@university.edu', coordinatorPhone: '+1 (555) 890-3456', email: 'renewables@university.edu', description: 'Clean technology research collective building solar campus charging kiosks and micro-wind prototypes.' }
-];
-
-const DEFAULT_COORDINATORS = [
-  { id: 1, name: 'Alice Johnson', email: 'alice.johnson@university.edu', dept: 'Computer Science', phone: '+1 (555) 342-8910', role: 'Club Coordinator' },
-  { id: 2, name: 'Bob Smith', email: 'bob.smith@university.edu', dept: 'Electronics', phone: '+1 (555) 678-1290', role: 'Club Coordinator' },
-  { id: 4, name: 'Diana Prince', email: 'diana.prince@university.edu', dept: 'Civil Engineering', phone: '+1 (555) 890-3456', role: 'Club Coordinator' },
-  { id: 6, name: 'Fiona Gallagher', email: 'fiona.gallagher@university.edu', dept: 'Data Science', phone: '+1 (555) 456-7890', role: 'Club Coordinator' },
-  { id: 7, name: 'George Miller', email: 'george.miller@university.edu', dept: 'Mechanical Engineering', phone: '+1 (555) 789-0123', role: 'Club Coordinator' }
-];
+import { clubsService } from '../../services/clubsService';
+import { membersService } from '../../services/membersService';
+import { uploadService } from '../../services/uploadService';
 
 export default function ClubDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const [activeModal, setActiveModal] = useState(null); // 'deleteClub' | null
-  const [coordinators, setCoordinators] = useState(DEFAULT_COORDINATORS);
+  const [activeModal, setActiveModal] = useState<string | null>(null); // 'deleteClub' | null
+  const [coordinators, setCoordinators] = useState<any[]>([]);
 
   // Load available club coordinators
   useEffect(() => {
-    try {
-      const savedMembers = localStorage.getItem('unisync_members');
-      if (savedMembers) {
-        const parsed = JSON.parse(savedMembers);
-        const coords = parsed.filter(m => m.role === 'Club Coordinator');
-        if (coords.length > 0) {
-          setCoordinators(coords);
+    async function loadCoordinators() {
+      try {
+        const res = await membersService.getMembers({ role: 'club' });
+        if (res.data && res.data.length > 0) {
+          setCoordinators(res.data);
         }
+      } catch (e) {
+        console.warn('Could not load coordinators from server:', e);
       }
-    } catch (e) {
-      console.warn('Could not read saved members', e);
     }
+    loadCoordinators();
   }, []);
 
   // Form editable states
@@ -97,65 +82,49 @@ export default function ClubDetails() {
 
   // Load and populate club details whenever the ID changes
   useEffect(() => {
-    let currentClub = null;
-    try {
-      const saved = localStorage.getItem('unisync_clubs');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          currentClub = parsed.find(c => String(c.id) === String(id));
+    async function fetchClub() {
+      if (!id) return;
+      try {
+        const res = await clubsService.getClubById(id);
+        const currentClub: any = res.data;
+        if (currentClub) {
+          setClubName(currentClub.name || '');
+          setDept(currentClub.dept || 'Engineering');
+          setEmail(currentClub.email || '');
+          setMembersCount(currentClub.members || 15);
+          setEventsCount(currentClub.events || 0);
+          setDescription(currentClub.description || '');
+          setLogoPreview(currentClub.logo_url || currentClub.logo || null);
+
+          // Coordinator
+          const matchedCoord = coordinators.find((c) => c.name === currentClub.coordinator);
+          setCoordinatorName(currentClub.coordinator || matchedCoord?.name || 'Alice Johnson');
+          setCoordinatorDept(currentClub.coordinatorDept || matchedCoord?.dept || 'Engineering');
+          setCoordinatorEmail(currentClub.coordinatorEmail || matchedCoord?.email || 'coordinator@university.edu');
+          setCoordinatorPhone(currentClub.coordinatorPhone || matchedCoord?.phone || '+1 (555) 342-8910');
+
+          // President
+          setPresident(currentClub.president || '');
+          setPresidentEmail(currentClub.presidentEmail || `${(currentClub.president || 'president').toLowerCase().replace(/\s+/g, '.')}@university.edu`);
+          setPresidentPhone(currentClub.presidentPhone || currentClub.phone || '+1 (555) 234-8765');
+          setPresidentYear(currentClub.presidentYear || '3rd Year');
+
+          // Vice President
+          setVpName(currentClub.vicePresident?.name || 'Sarah Jenkins');
+          setVpEmail(currentClub.vicePresident?.email || 'sarah.jenkins@university.edu');
+          setVpPhone(currentClub.vicePresident?.phone || '+1 (555) 876-5432');
+          setVpYear(currentClub.vicePresident?.year || '3rd Year');
+
+          // Cabinet positions
+          if (currentClub.executivePositions && Array.isArray(currentClub.executivePositions)) {
+            setPositions(currentClub.executivePositions);
+          }
         }
-      }
-    } catch (e) {
-      console.warn('Could not read saved clubs', e);
-    }
-
-    if (!currentClub) {
-      currentClub = DEFAULT_CLUBS.find(c => String(c.id) === String(id)) || DEFAULT_CLUBS[0];
-    }
-
-    if (currentClub) {
-      setClubName(currentClub.name || '');
-      setDept(currentClub.dept || 'Engineering');
-      setEmail(currentClub.email || '');
-      setMembersCount(currentClub.members || 15);
-      setEventsCount(currentClub.events || 0);
-      setDescription(currentClub.description || '');
-      setLogoPreview(currentClub.logo || null);
-
-      // Coordinator
-      const matchedCoord = coordinators.find(c => c.name === currentClub.coordinator) || DEFAULT_COORDINATORS[0];
-      setCoordinatorName(currentClub.coordinator || matchedCoord.name);
-      setCoordinatorDept(currentClub.coordinatorDept || matchedCoord.dept);
-      setCoordinatorEmail(currentClub.coordinatorEmail || matchedCoord.email);
-      setCoordinatorPhone(currentClub.coordinatorPhone || matchedCoord.phone);
-
-      // President
-      setPresident(currentClub.president || '');
-      setPresidentEmail(currentClub.presidentEmail || `${(currentClub.president || 'president').toLowerCase().replace(/\s+/g, '.')}@university.edu`);
-      setPresidentPhone(currentClub.presidentPhone || '+1 (555) 234-8765');
-      setPresidentYear(currentClub.presidentYear || '3rd Year');
-
-      // Vice President
-      setVpName(currentClub.vicePresident?.name || 'Sarah Jenkins');
-      setVpEmail(currentClub.vicePresident?.email || 'sarah.jenkins@university.edu');
-      setVpPhone(currentClub.vicePresident?.phone || '+1 (555) 876-5432');
-      setVpYear(currentClub.vicePresident?.year || '3rd Year');
-
-      // Cabinet positions
-      if (currentClub.executivePositions && Array.isArray(currentClub.executivePositions) && currentClub.executivePositions.length > 0) {
-        setPositions(currentClub.executivePositions.map((p, idx) => ({
-          id: p.id || idx + 1,
-          title: p.title || '',
-          memberName: p.memberName || ''
-        })));
-      } else {
-        setPositions([
-          { id: 1, title: 'Secretary', memberName: 'Emily Chen' },
-          { id: 2, title: 'Treasurer', memberName: 'Mark Lee' }
-        ]);
+      } catch (err: any) {
+        console.error('Failed to load club details:', err);
       }
     }
+    fetchClub();
   }, [id, coordinators]);
 
   // When coordinator changes from dropdown, sync department, email, and phone
@@ -229,7 +198,7 @@ export default function ClubDetails() {
   };
 
   // Save changes handler
-  const handleSaveChanges = (e) => {
+  const handleSaveChanges = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!clubName.trim()) {
@@ -272,51 +241,37 @@ export default function ClubDetails() {
     };
 
     try {
-      const saved = localStorage.getItem('unisync_clubs');
-      let clubList = [];
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) clubList = parsed;
-      } else {
-        clubList = [...DEFAULT_CLUBS];
-      }
+      if (!id) return;
+      await clubsService.updateClub(id, {
+        name: clubName,
+        dept,
+        email,
+        description,
+        president,
+        phone: presidentPhone,
+        coordinator: coordinatorName,
+        members_count: membersCount,
+        events_count: eventsCount,
+      });
 
-      const existingIndex = clubList.findIndex(c => String(c.id) === String(id));
-      if (existingIndex >= 0) {
-        clubList[existingIndex] = { ...clubList[existingIndex], ...updatedClub };
-      } else {
-        clubList.push(updatedClub);
-      }
-
-      localStorage.setItem('unisync_clubs', JSON.stringify(clubList));
       showToast(`Club profile for "${clubName}" updated successfully!`, 'success');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving club changes', err);
-      showToast('Error saving changes to local storage', 'error');
+      showToast(err.message || 'Error saving changes to server', 'error');
     }
   };
 
   // Delete Club handler
-  const handleDeleteClub = () => {
+  const handleDeleteClub = async () => {
     try {
-      const saved = localStorage.getItem('unisync_clubs');
-      let clubList = [];
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          clubList = parsed.filter(c => String(c.id) !== String(id));
-        }
-      } else {
-        clubList = DEFAULT_CLUBS.filter(c => String(c.id) !== String(id));
-      }
-
-      localStorage.setItem('unisync_clubs', JSON.stringify(clubList));
+      if (!id) return;
+      await clubsService.deleteClub(id);
       showToast(`Club "${clubName}" has been deleted successfully!`, 'success');
       setActiveModal(null);
       navigate('/admin/clubs');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting club', err);
-      showToast('Error deleting club record.', 'error');
+      showToast(err.message || 'Error deleting club record.', 'error');
     }
   };
 

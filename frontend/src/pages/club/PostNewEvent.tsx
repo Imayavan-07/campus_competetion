@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CalendarIcon,
@@ -13,11 +13,39 @@ import {
   DocumentTextIcon
 } from '../../components/common/Icons';
 import { useToast } from '../../components/common/Toast';
-import { CAMPUS_VENUES, createClubProposal } from '../../data/eventsData';
+import { useAuth } from '../../context/AuthContext';
+import { eventsService } from '../../services/eventsService';
+import { venuesService, Venue } from '../../services/venuesService';
+import { uploadService } from '../../services/uploadService';
 
 export default function PostNewEvent() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const currentClubName = user?.club || 'Robotics Society';
+
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  // File Upload State
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const [posterPreview, setPosterPreview] = useState<string | null>(null);
+  const [guidelinesPdfFile, setGuidelinesPdfFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    async function loadVenues() {
+      try {
+        const data = await venuesService.getVenues();
+        setVenues(data || []);
+        if (data && data.length > 0) {
+          setEventDetails(prev => ({ ...prev, venue: data[0].name }));
+        }
+      } catch (err: any) {
+        console.error('Failed to load venues', err);
+      }
+    }
+    loadVenues();
+  }, []);
 
   // SECTION I: EVENT DETAILS
   const [eventDetails, setEventDetails] = useState({
@@ -99,10 +127,15 @@ export default function PostNewEvent() {
   };
 
   // Venue lookup
-  const selectedVenueMeta = CAMPUS_VENUES.find(v => v.name === eventDetails.venue) || CAMPUS_VENUES[0];
+  const selectedVenueMeta = venues.find(v => v.name === eventDetails.venue) || venues[0] || {
+    name: eventDetails.venue,
+    building: 'Campus Complex',
+    capacity: 300,
+    facilities: 'Standard Multimedia AV'
+  };
 
   // Submission Handler
-  const handlePostEvent = (e: React.FormEvent) => {
+  const handlePostEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventDetails.name.trim()) {
       showToast('Please enter an event name!', 'error');
@@ -113,52 +146,78 @@ export default function PostNewEvent() {
       return;
     }
 
-    const dateObj = new Date(eventDetails.date);
-    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    const month = !isNaN(dateObj.getMonth()) ? months[dateObj.getMonth()] : 'OCT';
-    const day = !isNaN(dateObj.getDate()) ? String(dateObj.getDate()).padStart(2, '0') : '24';
+    try {
+      setSubmitting(true);
+      let uploadedPosterUrl: string | null = null;
+      let uploadedPdfUrl: string | null = null;
 
-    // Parse agendaText into agenda items
-    const parsedAgenda = eventDetails.agendaText.split('\n').filter(line => line.trim()).map(line => {
-      const parts = line.split('-');
-      if (parts.length >= 2) {
-        return { time: parts[0].trim(), title: parts.slice(1).join('-').trim() };
+      if (posterFile) {
+        showToast('Uploading event promotional poster...', 'info');
+        const uploadRes = await uploadService.uploadImage(posterFile);
+        uploadedPosterUrl = uploadRes.url;
       }
-      return { time: 'Session', title: line.trim() };
-    });
 
-    const created = createClubProposal({
-      title: eventDetails.name,
-      description: eventDetails.about,
-      academicYear: eventDetails.academicYear,
-      venue: eventDetails.venue,
-      hosts: eventDetails.hosts ? eventDetails.hosts.split(',').map(h => h.trim()) : ['Robotics Guild Coordinator'],
-      date: eventDetails.date,
-      timeSlot: eventDetails.timeSlot,
-      session: eventDetails.session,
-      month,
-      day,
-      agenda: parsedAgenda.length > 0 ? parsedAgenda : [
-        { time: '10:00 AM', title: 'Registration & Check-In' },
-        { time: '02:00 PM', title: 'Main Event Session & Awards' }
-      ],
-      budget: `$${totalBudget.toLocaleString()}`,
-      budgetBreakdown: {
-        prizeMoney: budgetState.prizeMoney,
-        refreshments: budgetState.refreshments,
-        decors: budgetState.decors,
-        miscPurchases: budgetState.miscPurchases,
-        customItems: budgetState.others.map(o => ({ id: o.id, name: o.name, amount: o.amount }))
-      },
-      hasRegForm: false,
-      attendees: 120,
-      maxCapacity: selectedVenueMeta?.capacity || 300,
-      registrationStatus: 'Registration Open',
-      registrationDeadline: eventDetails.date
-    });
+      if (guidelinesPdfFile) {
+        showToast('Uploading event guidelines document...', 'info');
+        const docRes = await uploadService.uploadDocument(guidelinesPdfFile);
+        uploadedPdfUrl = docRes.url;
+      }
 
-    showToast(`Event "${created.title}" successfully posted! You can design its custom registration form in the Registration Forms section.`, 'success');
-    navigate('/club/events');
+      const dateObj = new Date(eventDetails.date);
+      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      const month = !isNaN(dateObj.getMonth()) ? months[dateObj.getMonth()] : 'OCT';
+      const day = !isNaN(dateObj.getDate()) ? String(dateObj.getDate()).padStart(2, '0') : '24';
+
+      // Parse agendaText into agenda items
+      const parsedAgenda = eventDetails.agendaText.split('\n').filter(line => line.trim()).map(line => {
+        const parts = line.split('-');
+        if (parts.length >= 2) {
+          return { time: parts[0].trim(), title: parts.slice(1).join('-').trim() };
+        }
+        return { time: 'Session', title: line.trim() };
+      });
+
+      const hostsList = eventDetails.hosts ? eventDetails.hosts.split(',').map(h => h.trim()) : ['Club Coordinator'];
+
+      const created = await eventsService.createEvent({
+        title: eventDetails.name,
+        club: currentClubName,
+        category: 'competition',
+        description: eventDetails.about,
+        venue: eventDetails.venue,
+        date: eventDetails.date,
+        timeSlot: eventDetails.timeSlot,
+        month,
+        day,
+        leadCoordinator: hostsList[0] || 'Club Coordinator',
+        facultyAdvisor: hostsList[1] || 'Faculty Advisor',
+        agenda: parsedAgenda.length > 0 ? parsedAgenda : [
+          { time: '10:00 AM', title: 'Registration & Check-In' },
+          { time: '02:00 PM', title: 'Main Event Session & Awards' }
+        ],
+        budget: `$${totalBudget.toLocaleString()}`,
+        budgetBreakdown: {
+          prizeMoney: budgetState.prizeMoney,
+          refreshments: budgetState.refreshments,
+          decors: budgetState.decors,
+          miscPurchases: budgetState.miscPurchases,
+          customItems: budgetState.others.map(o => ({ id: o.id, name: o.name, amount: o.amount }))
+        },
+        hasRegForm: false,
+        attendees: 0,
+        status: 'Upcoming',
+        approvalStatus: 'Pending',
+        poster_url: uploadedPosterUrl,
+        guidelines_pdf_url: uploadedPdfUrl
+      });
+
+      showToast(`Event "${created.title}" successfully submitted for administrative clearance!`, 'success');
+      navigate('/club/events');
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to submit event proposal to backend', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSaveDraft = () => {
@@ -292,7 +351,7 @@ export default function PostNewEvent() {
                   value={eventDetails.venue}
                   onChange={(e) => setEventDetails({ ...eventDetails, venue: e.target.value })}
                 >
-                  {CAMPUS_VENUES.map(v => (
+                  {venues.map(v => (
                     <option key={v.id} value={v.name}>
                       {v.name} — ({v.building} • Max Cap: {v.capacity} Seats)
                     </option>
@@ -365,6 +424,58 @@ export default function PostNewEvent() {
                 />
                 <span className="text-[11px] text-muted mt-1 block">
                   Enter each agenda milestone on a new line in format: <code className="text-primary font-bold">HH:MM AM - Stage Title</code>
+                </span>
+              </div>
+
+              {/* 8. Promotional Banner / Poster Image Upload */}
+              <div className="form-group">
+                <label className="form-label font-bold text-xs text-main">
+                  8. Event Poster / Promotional Banner (Stored in Backend Uploads)
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="form-input text-xs"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setPosterFile(file);
+                        setPosterPreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                  {posterPreview && (
+                    <img 
+                      src={posterPreview} 
+                      alt="Poster Preview" 
+                      className="w-16 h-16 object-cover rounded-xl border border-gray-200 dark:border-neutral-700" 
+                    />
+                  )}
+                </div>
+                <span className="text-[11px] text-muted mt-1 block">
+                  Accepts PNG, JPG, WebP. File will be stored on local server storage.
+                </span>
+              </div>
+
+              {/* 9. Rulebook / Guidelines PDF Document Upload */}
+              <div className="form-group">
+                <label className="form-label font-bold text-xs text-main">
+                  9. Official Rulebook / Guidelines (PDF Document)
+                </label>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  className="form-input text-xs"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setGuidelinesPdfFile(file);
+                    }
+                  }}
+                />
+                <span className="text-[11px] text-muted mt-1 block">
+                  Upload competition rules or problem statement booklet (PDF up to 15MB).
                 </span>
               </div>
             </div>

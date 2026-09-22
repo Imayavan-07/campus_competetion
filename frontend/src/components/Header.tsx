@@ -6,6 +6,7 @@ import {
   MoonIcon, 
   LogoutIcon 
 } from './common/Icons';
+import { useAuth } from '../context/AuthContext';
 
 export interface HeaderProps {
   roleLabel?: string;
@@ -17,6 +18,7 @@ export default function Header({
   userName = "Ares Mitchell"
 }: HeaderProps): React.JSX.Element {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [isNotifOpen, setIsNotifOpen] = useState<boolean>(false);
 
@@ -45,6 +47,7 @@ export default function Header({
   };
 
   const handleLogout = () => {
+    logout();
     navigate('/login');
   };
 
@@ -88,14 +91,14 @@ export default function Header({
         {/* User Profile Pill */}
         <div 
           className="user-profile-pill"
-          onClick={() => alert(`Active User: ${userName} (${roleLabel})`)}
+          onClick={() => alert(`Active User: ${userName || 'User'} (${roleLabel})`)}
           title="View profile settings"
         >
           <div className="user-avatar-box">
-            {userName.charAt(0)}
+            {userName ? userName.charAt(0).toUpperCase() : 'U'}
           </div>
           <div className="user-info-text">
-            <p className="user-name">{userName}</p>
+            <p className="user-name">{userName || (roleLabel === 'Administrator' ? 'Chief Admin' : 'Campus Member')}</p>
             <p className="user-role">{roleLabel}</p>
           </div>
         </div>

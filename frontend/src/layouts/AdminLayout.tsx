@@ -11,8 +11,10 @@ import {
   DirectoryIcon, 
   ReviewsIcon 
 } from '../components/common/Icons';
+import { useAuth } from '../context/AuthContext';
 
 export default function AdminLayout(): React.JSX.Element {
+  const { user } = useAuth();
   const adminSections: NavSection[] = [
     {
       title: "Core Management",
@@ -46,7 +48,7 @@ export default function AdminLayout(): React.JSX.Element {
         sections={adminSections} 
       />
       <main className="main-content">
-        <Header roleLabel="Administrator" userName="Chief Admin" />
+        <Header roleLabel="Administrator" userName={user?.name || "Chief Admin"} />
         <div className="page-container">
           <Outlet />
         </div>
@@ -54,3 +56,4 @@ export default function AdminLayout(): React.JSX.Element {
     </div>
   );
 }
+

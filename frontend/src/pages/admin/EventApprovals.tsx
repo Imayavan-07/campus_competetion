@@ -3,34 +3,58 @@ import { useNavigate } from 'react-router-dom';
 import { CheckIcon, XMarkIcon, EyeIcon } from '../../components/common/Icons';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
-import { getStoredApprovals, approveProposal, rejectProposal } from '../../data/eventsData';
+import { eventsService, EventItem } from '../../services/eventsService';
 
 export default function EventApprovals() {
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [pendingEvents, setPendingEvents] = useState<EventItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [pendingEvents, setPendingEvents] = useState([]);
-
-  useEffect(() => {
-    setPendingEvents(getStoredApprovals());
-  }, []);
-
-  const handleApprove = (id, title) => {
-    const updated = approveProposal(id);
-    setPendingEvents(updated);
-    showToast(`Approved event proposal: "${title}"!`, 'success');
+  const fetchApprovals = async () => {
+    try {
+      setLoading(true);
+      const res = await eventsService.getEvents();
+      const pending = res.data.filter(
+        (e) => e.status === 'Pending Review' || e.approvalStatus === 'Pending Review'
+      );
+      setPendingEvents(pending);
+    } catch (e) {
+      console.error('Failed to load pending approvals:', e);
+      showToast('Could not load proposals from server.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleRejectConfirm = () => {
+  useEffect(() => {
+    fetchApprovals();
+  }, []);
+
+  const handleApprove = async (id: number, title: string) => {
+    try {
+      await eventsService.updateStatus(id, 'Upcoming', 'Approved');
+      setPendingEvents((prev) => prev.filter((e) => e.id !== id));
+      showToast(`Approved event proposal: "${title}"!`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to approve proposal.', 'error');
+    }
+  };
+
+  const handleRejectConfirm = async () => {
     if (!selectedEvent) return;
-    const updated = rejectProposal(selectedEvent.id, rejectionReason);
-    setPendingEvents(updated);
-    showToast(`Rejected proposal "${selectedEvent.title}" with reason recorded.`, 'error');
-    setIsRejectModalOpen(false);
-    setRejectionReason('');
+    try {
+      await eventsService.updateStatus(selectedEvent.id, 'Rejected', 'Rejected');
+      setPendingEvents((prev) => prev.filter((e) => e.id !== selectedEvent.id));
+      showToast(`Rejected proposal "${selectedEvent.title}".`, 'error');
+      setIsRejectModalOpen(false);
+      setRejectionReason('');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to reject proposal.', 'error');
+    }
   };
 
   return (
