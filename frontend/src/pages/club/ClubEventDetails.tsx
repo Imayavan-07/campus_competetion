@@ -24,6 +24,8 @@ import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
 import { eventsService, EventItem } from '../../services/eventsService';
 import { venuesService, Venue } from '../../services/venuesService';
+import { registrationsService } from '../../services/registrationsService';
+import { formatErrorMessage } from '../../utils/errorFormatter';
 import { api } from '../../services/apiClient';
 
 export default function ClubEventDetails() {
@@ -38,15 +40,17 @@ export default function ClubEventDetails() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Form states
   const [newDelegate, setNewDelegate] = useState({
     name: '',
     reg: '',
     email: '',
+    track: 'General Admission',
     status: 'Confirmed'
   });
 
-  const [newAgenda, setNewAgenda] = useState({
-    time: '04:00 PM',
+  const [agendaForm, setAgendaForm] = useState({
+    time: '',
     title: ''
   });
 
@@ -54,24 +58,28 @@ export default function ClubEventDetails() {
     if (!id) return;
     try {
       setLoading(true);
-      const [found, allVenues] = await Promise.all([
+      const [found, allVenues, eventRegs] = await Promise.all([
         eventsService.getEventById(Number(id)),
-        venuesService.getVenues()
+        venuesService.getVenues(),
+        registrationsService.getRegistrations(Number(id)).catch(() => [])
       ]);
       setVenues(allVenues || []);
       if (found) {
         setEvent(found);
-        const initialDelegates = found.sampleDelegates || [
-          { name: 'Alex Vance', reg: '2024CS01', email: 'alex.vance@university.edu', status: 'Confirmed', checkedIn: true },
-          { name: 'Sarah Jenkins', reg: '2024EC12', email: 'sarah.j@university.edu', status: 'Confirmed', checkedIn: false },
-          { name: 'Liam O Connor', reg: '2023ME44', email: 'liam.oc@university.edu', status: 'Waitlisted', checkedIn: false },
-          { name: 'Maya Lin', reg: '2024EC14', email: 'maya.lin@university.edu', status: 'Confirmed', checkedIn: true },
-          { name: 'Devin Cole', reg: '2024RO01', email: 'devin.cole@university.edu', status: 'Confirmed', checkedIn: false }
-        ];
-        setDelegates(initialDelegates);
+        const mappedRegs = Array.isArray(eventRegs) && eventRegs.length > 0
+          ? eventRegs.map((r: any) => ({
+              id: r.id,
+              name: r.student_name || r.name || 'Campus Student',
+              reg: r.student_reg_no || r.reg || 'REG-PENDING',
+              email: r.email || '',
+              status: r.status || 'Confirmed',
+              checkedIn: !!r.checked_in || !!r.checkedIn,
+            }))
+          : (found.sampleDelegates || []);
+        setDelegates(mappedRegs);
       }
     } catch (err: any) {
-      showToast('Failed to load event details from server', 'error');
+      showToast(formatErrorMessage(err), 'error');
     } finally {
       setLoading(false);
     }

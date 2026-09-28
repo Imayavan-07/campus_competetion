@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { formatErrorMessage } from '../../utils/errorFormatter';
 
 interface Props {
   children: ReactNode;
@@ -29,6 +30,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
+      const displayMessage = formatErrorMessage(this.state.error);
       return (
         <div style={{
           padding: '32px',
@@ -41,13 +43,13 @@ export default class ErrorBoundary extends Component<Props, State> {
           fontFamily: 'inherit'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-            <span style={{ fontSize: '24px' }}>⚠️</span>
+            <span style={{ fontSize: '24px' }}>🛡️</span>
             <div>
               <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#dc2626' }}>
-                {this.props.fallbackTitle || 'Dashboard Display Error'}
+                {this.props.fallbackTitle || 'Component Recovered Gracefully'}
               </h2>
               <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#6b7280' }}>
-                An unexpected runtime error was caught safely.
+                The interface encountered an unexpected rendering condition and has been safely contained.
               </p>
             </div>
           </div>
@@ -59,11 +61,12 @@ export default class ErrorBoundary extends Component<Props, State> {
             borderRadius: '10px',
             fontSize: '13px',
             lineHeight: '1.5',
-            fontFamily: 'monospace',
+            fontFamily: 'inherit',
+            fontWeight: 500,
             marginBottom: '16px',
             border: '1px solid #fecaca'
           }}>
-            {this.state.error?.message || this.state.error?.toString()}
+            {displayMessage}
           </div>
 
           {this.state.errorInfo?.componentStack && (

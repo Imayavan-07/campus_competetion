@@ -6,7 +6,7 @@ export async function getDashboardStats(req: Request, res: Response): Promise<vo
 
   let totalClubs = mockStore.clubs.length;
   let totalEvents = mockStore.events.length;
-  let totalStudents = 3450;
+  let totalStudents = mockStore.users.filter((u) => u.role === 'student').length || 1;
   let pendingApprovals = mockStore.events.filter(
     (e) => e.status === 'Pending Review' || e.approval_status === 'Pending Review'
   ).length;
@@ -18,6 +18,11 @@ export async function getDashboardStats(req: Request, res: Response): Promise<vo
 
       const [eventCount]: any = await db.pool.query('SELECT COUNT(*) as count FROM events');
       totalEvents = eventCount[0]?.count || totalEvents;
+
+      const [studentCount]: any = await db.pool.query(
+        "SELECT COUNT(*) as count FROM users WHERE role = 'student'"
+      );
+      totalStudents = studentCount[0]?.count || totalStudents;
 
       const [approvalCount]: any = await db.pool.query(
         "SELECT COUNT(*) as count FROM events WHERE status = 'Pending Review' OR approval_status = 'Pending Review'"

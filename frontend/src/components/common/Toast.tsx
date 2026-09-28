@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { CheckIcon, XMarkIcon, InfoIcon, AlertCircleIcon } from './Icons';
+import { formatErrorMessage } from '../../utils/errorFormatter';
 
 export type ToastType = 'success' | 'info' | 'warning' | 'error';
 
@@ -18,12 +19,13 @@ const ToastContext = createContext<ToastContextType | null>(null);
 export function ToastProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const addToast = useCallback((message: string, type: ToastType = 'success') => {
+  const addToast = useCallback((rawMessage: string, type: ToastType = 'success') => {
     const id = Date.now();
+    const message = type === 'error' ? formatErrorMessage(rawMessage) : rawMessage;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    }, 4500);
   }, []);
 
   const removeToast = useCallback((id: number) => {

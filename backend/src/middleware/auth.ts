@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { ENV } from '../config/env';
 import { AuthenticatedRequest, AuthUser, UserRole } from '../types';
+import { isTokenRevoked } from '../controllers/authController';
 
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
@@ -15,6 +16,14 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   }
 
   const token = authHeader.split(' ')[1];
+
+  if (isTokenRevoked(token)) {
+    res.status(401).json({
+      success: false,
+      message: 'This session has ended. Please sign in again with your password.',
+    });
+    return;
+  }
 
   try {
     const decoded = jwt.verify(token, ENV.JWT.SECRET) as AuthUser;

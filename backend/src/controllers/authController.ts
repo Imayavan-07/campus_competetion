@@ -89,7 +89,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   };
 
   const token = jwt.sign(payload, ENV.JWT.SECRET, {
-    expiresIn: '7d',
+    expiresIn: (ENV.JWT.EXPIRES_IN as any) || '50m',
   });
 
   res.status(200).json({
@@ -158,7 +158,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     status: newUser.status,
   };
 
-  const token = jwt.sign(payload, ENV.JWT.SECRET, { expiresIn: '7d' });
+  const token = jwt.sign(payload, ENV.JWT.SECRET, { expiresIn: (ENV.JWT.EXPIRES_IN as any) || '50m' });
 
   res.status(201).json({
     success: true,
@@ -174,8 +174,136 @@ export async function getMe(req: AuthenticatedRequest, res: Response): Promise<v
     return;
   }
 
+  const db = getDb();
+  if (db.isMySQL && db.pool) {
+    try {
+      const [rows]: any = await db.pool.query(
+        'SELECT id, name, email, role, phone, dept, assigned_club, status, created_at FROM users WHERE id = ?',
+        [req.user.id]
+      );
+      if (rows && rows.length > 0) {
+        res.status(200).json({
+          success: true,
+          user: rows[0],
+        });
+        return;
+      }
+    } catch (e) {
+      console.warn('Notice: Error fetching fresh user in getMe, using fallback:', e);
+    }
+  }
+
+  const mem = mockStore.users.find((u) => u.id === req.user?.id || u.email === req.user?.email);
+  if (mem) {
+    res.status(200).json({
+      success: true,
+      user: {
+        id: mem.id,
+        name: mem.name,
+        email: mem.email,
+        role: mem.role,
+        phone: mem.phone || '+1 (555) 000-0000',
+        dept: mem.dept || 'Academic Affairs',
+        assigned_club: mem.assigned_club || (mem.role === 'admin' ? 'Central Governance' : null),
+        status: mem.status || 'Active',
+        created_at: mem.created_at || '2026-09-01T08:00:00.000Z',
+      },
+    });
+    return;
+  }
+
   res.status(200).json({
     success: true,
     user: req.user,
   });
 }
+
+export async function updateProfile(req: AuthenticatedRequest, res: Response): Promise<void> {
+  if (!req.user) {
+    res.status(401).json({ success: false, message: 'Unauthorized' });
+    return;
+  }
+
+  const { name, phone, dept, assigned_club } = req.body;
+  const userId = req.user.id;
+  const db = getDb();
+
+  if (db.isMySQL && db.pool) {
+    try {
+      await db.pool.query(
+        'UPDATE users SET name = COALESCE(?, name), phone = COALESCE(?, phone), dept = COALESCE(?, dept), assigned_club = COALESCE(?, assigned_club) WHERE id = ?',
+        [name, phone, dept, assigned_club, userId]
+      );
+      const [rows]: any = await db.pool.query(
+        'SELECT id, name, email, role, phone, dept, assigned_club, status, created_at FROM users WHERE id = ?',
+        [userId]
+      );
+      if (rows && rows.length > 0) {
+        res.status(200).json({
+          success: true,
+          message: 'Member profile updated successfully.',
+          user: rows[0],
+        });
+        return;
+      }
+    } catch (err: any) {
+      console.error('Error updating profile in MySQL:', err);
+    }
+  }
+
+  // Fallback to in-memory store
+  const user = mockStore.users.find((u) => u.id === userId || u.email === req.user?.email);
+  if (user) {
+    if (name) user.name = name;
+    if (phone !== undefined) user.phone = phone;
+    if (dept !== undefined) user.dept = dept;
+    if (assigned_club !== undefined) user.assigned_club = assigned_club;
+
+    const payload: AuthUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      dept: user.dept,
+      assigned_club: user.assigned_club,
+      status: user.status,
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'Member profile updated successfully.',
+      user: {
+        ...payload,
+        created_at: user.created_at || '2026-09-01T08:00:00.000Z',
+      },
+    });
+    return;
+  }
+
+  res.status(404).json({ success: false, message: 'User not found in system directory.' });
+}
+
+// Registry of killed/ended sessions
+export const revokedTokens = new Set<string>();
+
+export function isTokenRevoked(token: string): boolean {
+  return revokedTokens.has(token);
+}
+
+export async function logout(req: Request, res: Response): Promise<void> {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    if (token) {
+      revokedTokens.add(token);
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Session terminated successfully. Persona logged out.',
+  });
+}
+
+

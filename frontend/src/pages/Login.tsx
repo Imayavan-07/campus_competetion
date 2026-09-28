@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   ShieldIcon,
   UsersIcon,
@@ -15,6 +15,7 @@ import {
 
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/common/Toast';
+import { formatErrorMessage } from '../utils/errorFormatter';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -22,8 +23,18 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const location = useLocation();
+  const { login, user, isAuthenticated } = useAuth();
   const { showToast } = useToast();
+
+  // If already authenticated with valid session, navigate directly to portal
+  React.useEffect(() => {
+    if (isAuthenticated && user) {
+      if (user.role === 'admin') navigate('/admin', { replace: true });
+      else if (user.role === 'club') navigate('/club', { replace: true });
+      else navigate('/student', { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,17 +44,22 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      const user = await login(email, password);
-      showToast(`Authentication successful. Welcome, ${user.name}!`, 'success');
-      if (user.role === 'admin') {
-        navigate('/admin');
-      } else if (user.role === 'club') {
-        navigate('/club');
+      const loggedUser = await login(email, password);
+      showToast(`Authentication successful. Welcome, ${loggedUser.name}!`, 'success');
+
+      // Check if user came from a protected URL of the same role
+      const from = (location.state as any)?.from?.pathname;
+      if (from && from.startsWith(`/${loggedUser.role}`)) {
+        navigate(from, { replace: true });
+      } else if (loggedUser.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else if (loggedUser.role === 'club') {
+        navigate('/club', { replace: true });
       } else {
-        navigate('/student');
+        navigate('/student', { replace: true });
       }
     } catch (err: any) {
-      showToast(err.message || 'Login failed. Please verify your credentials.', 'error');
+      showToast(formatErrorMessage(err), 'error');
     } finally {
       setLoading(false);
     }
@@ -184,21 +200,21 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Live Telemetry Dock */}
+          {/* Live System Telemetry & Security Dock */}
           <div className="auth-telemetry-dock">
             <div className="telemetry-item">
-              <span className="telemetry-dot blue" />
-              <span><strong className="text-slate-800 font-bold">45</strong> Clubs</span>
+              <span className="telemetry-dot green" />
+              <span><strong className="text-slate-800 dark:text-neutral-200 font-bold">Campus Gateway</strong> Online</span>
             </div>
             <div className="telemetry-divider" />
             <div className="telemetry-item">
-              <span className="telemetry-dot green" />
-              <span><strong className="text-slate-800 font-bold">3,400+</strong> Students</span>
+              <span className="telemetry-dot blue" />
+              <span><strong className="text-slate-800 dark:text-neutral-200 font-bold">50-Min</strong> Session Guard</span>
             </div>
             <div className="telemetry-divider" />
             <div className="telemetry-item">
               <span className="telemetry-dot amber" />
-              <span><strong className="text-slate-800 font-bold">100%</strong> Digital</span>
+              <span><strong className="text-slate-800 dark:text-neutral-200 font-bold">256-Bit</strong> Encrypted</span>
             </div>
           </div>
         </div>
@@ -248,7 +264,10 @@ export default function Login() {
                   </span>
                   <a
                     href="#"
-                    onClick={(e) => { e.preventDefault(); alert('Password recovery link dispatched to student inbox.'); }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      showToast('For security, password resets are processed by the Campus Administrator (admin@university.edu).', 'info');
+                    }}
                     className="text-[11px] text-blue-600 hover:text-blue-700 transition-colors normal-case tracking-normal font-semibold hover:underline"
                   >
                     Forgot?

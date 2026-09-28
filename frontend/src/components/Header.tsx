@@ -15,10 +15,10 @@ export interface HeaderProps {
 
 export default function Header({
   roleLabel = "Administrator",
-  userName = "Ares Mitchell"
+  userName = "Campus User"
 }: HeaderProps): React.JSX.Element {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [isNotifOpen, setIsNotifOpen] = useState<boolean>(false);
 
@@ -46,16 +46,18 @@ export default function Header({
     });
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
-  const dummyNotifications = [
-    { id: 1, title: "New Event Proposal Submitted", desc: "Robotics Club submitted 'RoboWar 2026' for review.", time: "10 mins ago", unread: true },
-    { id: 2, title: "Membership Verification", desc: "18 new students completed competition registration.", time: "1 hour ago", unread: true },
-    { id: 3, title: "Global Calendar Synchronized", desc: "Auditorium slot confirmed for Oct 24th.", time: "Yesterday", unread: false }
-  ];
+  const handleProfileClick = () => {
+    const role = user?.role || (roleLabel === 'Administrator' ? 'admin' : roleLabel === 'Student' ? 'student' : 'club');
+    navigate(`/${role}/profile`);
+  };
+
+  const notifications: any[] = [];
+
 
   return (
     <header className="header">
@@ -91,8 +93,9 @@ export default function Header({
         {/* User Profile Pill */}
         <div 
           className="user-profile-pill"
-          onClick={() => alert(`Active User: ${userName || 'User'} (${roleLabel})`)}
-          title="View profile settings"
+          onClick={handleProfileClick}
+          title="View member onboarding profile dossier"
+          style={{ cursor: 'pointer' }}
         >
           <div className="user-avatar-box">
             {userName ? userName.charAt(0).toUpperCase() : 'U'}
@@ -102,6 +105,7 @@ export default function Header({
             <p className="user-role">{roleLabel}</p>
           </div>
         </div>
+
 
         {/* Red Logout Button */}
         <button 
@@ -135,23 +139,30 @@ export default function Header({
             </div>
 
             <div className="notification-list custom-scrollbar">
-              {dummyNotifications.map((n) => (
-                <div 
-                  key={n.id} 
-                  className={`notification-item ${n.unread ? 'unread' : ''}`}
-                >
-                  <div style={{ marginTop: '2px' }}>
-                    <span className={`inline-block w-2 h-2 rounded-full ${n.unread ? 'bg-blue-600' : 'bg-gray-300 dark:bg-neutral-600'}`}></span>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="flex items-center justify-between gap-2">
-                      <h5 style={{ fontSize: '0.82rem', fontWeight: 700 }} className="truncate">{n.title}</h5>
-                      <span style={{ fontSize: '0.68rem' }} className="text-muted">{n.time}</span>
+              {notifications.length > 0 ? (
+                notifications.map((n) => (
+                  <div 
+                    key={n.id} 
+                    className={`notification-item ${n.unread ? 'unread' : ''}`}
+                  >
+                    <div style={{ marginTop: '2px' }}>
+                      <span className={`inline-block w-2 h-2 rounded-full ${n.unread ? 'bg-blue-600' : 'bg-gray-300 dark:bg-neutral-600'}`}></span>
                     </div>
-                    <p style={{ fontSize: '0.75rem' }} className="text-muted mt-1 leading-snug">{n.desc}</p>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <h5 style={{ fontSize: '0.82rem', fontWeight: 700 }} className="truncate">{n.title}</h5>
+                        <span style={{ fontSize: '0.68rem' }} className="text-muted">{n.time}</span>
+                      </div>
+                      <p style={{ fontSize: '0.75rem' }} className="text-muted mt-1 leading-snug">{n.desc}</p>
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="p-6 text-center text-muted">
+                  <p className="text-xs font-bold text-slate-700 dark:text-neutral-200">No New Notifications</p>
+                  <p className="text-[11px] text-slate-400 dark:text-neutral-400 mt-1">All events and approvals for your persona are up to date.</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </>

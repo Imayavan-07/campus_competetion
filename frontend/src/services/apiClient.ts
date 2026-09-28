@@ -1,4 +1,5 @@
-// Centralized API Client for UniSync Frontend
+import { appCache } from '../utils/lruCache';
+import { formatErrorMessage } from '../utils/errorFormatter';
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -8,7 +9,10 @@ export const STORAGE_BASE_URL =
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, any>;
+  skipCache?: boolean;
 }
+
+export const SESSION_DURATION_MS = 50 * 60 * 1000; // 50 minutes maximum session duration
 
 export function getAuthToken(): string | null {
   return localStorage.getItem('unisync_token');
@@ -16,10 +20,36 @@ export function getAuthToken(): string | null {
 
 export function setAuthToken(token: string): void {
   localStorage.setItem('unisync_token', token);
+  if (!localStorage.getItem('unisync_session_start')) {
+    localStorage.setItem('unisync_session_start', Date.now().toString());
+  }
 }
 
+/**
+ * End and kill active session: removes auth credentials and purges the entire LRU cache.
+ */
 export function removeAuthToken(): void {
   localStorage.removeItem('unisync_token');
+  localStorage.removeItem('unisync_session_start');
+  sessionStorage.removeItem('unisync_token');
+  sessionStorage.removeItem('unisync_session_start');
+  // Clear LRU cache on persona session kill
+  appCache.clear();
+}
+
+export function getSessionStartTime(): number | null {
+  const raw = localStorage.getItem('unisync_session_start');
+  return raw ? parseInt(raw, 10) : null;
+}
+
+export function setSessionStartTime(time: number = Date.now()): void {
+  localStorage.setItem('unisync_session_start', time.toString());
+}
+
+export function checkIsSessionExpired(): boolean {
+  const start = getSessionStartTime();
+  if (!start) return true;
+  return Date.now() - start > SESSION_DURATION_MS;
 }
 
 export function getFullAssetUrl(path: string | null | undefined): string | null {
@@ -69,52 +99,98 @@ async function request<T = any>(endpoint: string, options: RequestOptions = {}):
     const response = await fetch(url, config);
 
     if (response.status === 401) {
-      // Token invalid or expired
+      // Token invalid or expired: kill session and clear cache
       removeAuthToken();
+      if (!endpoint.includes('/auth/login')) {
+        window.dispatchEvent(
+          new CustomEvent('unisync:session-expired', {
+            detail: { message: 'Your session has expired. Please sign in again.' },
+          })
+        );
+      }
     }
 
-    const json = await response.json();
+    let json: any = null;
+    try {
+      json = await response.json();
+    } catch {
+      json = null;
+    }
 
     if (!response.ok) {
-      throw new Error(json.message || `Request failed with status ${response.status}`);
+      const formatted = formatErrorMessage({
+        status: response.status,
+        message: json?.message,
+        errors: json?.errors,
+        data: json,
+      });
+      throw new Error(formatted);
     }
 
     return json;
   } catch (error: any) {
-    console.error(`[API Error] ${options.method || 'GET'} ${url}:`, error.message);
-    throw error;
+    // Ensure thrown errors are formatted and do not expose raw codes
+    const friendlyMessage = formatErrorMessage(error);
+    console.error(`[API Error] ${options.method || 'GET'} ${url}:`, friendlyMessage);
+    throw new Error(friendlyMessage);
   }
 }
 
 export const api = {
-  get: <T = any>(endpoint: string, params?: Record<string, any>, options?: RequestOptions) =>
-    request<T>(endpoint, { method: 'GET', params, ...options }),
+  get: async <T = any>(endpoint: string, params?: Record<string, any>, options?: RequestOptions): Promise<T> => {
+    // Construct cache key for LRU cache (15 items max, 30 min TTL)
+    const queryString = params ? '?' + new URLSearchParams(params as any).toString() : '';
+    const cacheKey = `GET:${endpoint}${queryString}`;
 
-  post: <T = any>(endpoint: string, body?: any, options?: RequestOptions) =>
-    request<T>(endpoint, {
+    if (!options?.skipCache) {
+      const cached = appCache.get(cacheKey);
+      if (cached !== null) {
+        return cached as T;
+      }
+    }
+
+    const data = await request<T>(endpoint, { method: 'GET', params, ...options });
+    if (!options?.skipCache && data) {
+      appCache.set(cacheKey, data);
+    }
+    return data;
+  },
+
+  post: async <T = any>(endpoint: string, body?: any, options?: RequestOptions): Promise<T> => {
+    // Mutations invalidate relevant LRU cache entries
+    appCache.clear();
+    return request<T>(endpoint, {
       method: 'POST',
       body: body instanceof FormData ? body : JSON.stringify(body),
       ...options,
-    }),
+    });
+  },
 
-  put: <T = any>(endpoint: string, body?: any, options?: RequestOptions) =>
-    request<T>(endpoint, {
+  put: async <T = any>(endpoint: string, body?: any, options?: RequestOptions): Promise<T> => {
+    appCache.clear();
+    return request<T>(endpoint, {
       method: 'PUT',
       body: body instanceof FormData ? body : JSON.stringify(body),
       ...options,
-    }),
+    });
+  },
 
-  patch: <T = any>(endpoint: string, body?: any, options?: RequestOptions) =>
-    request<T>(endpoint, {
+  patch: async <T = any>(endpoint: string, body?: any, options?: RequestOptions): Promise<T> => {
+    appCache.clear();
+    return request<T>(endpoint, {
       method: 'PATCH',
       body: body instanceof FormData ? body : JSON.stringify(body),
       ...options,
-    }),
+    });
+  },
 
-  delete: <T = any>(endpoint: string, options?: RequestOptions) =>
-    request<T>(endpoint, { method: 'DELETE', ...options }),
+  delete: async <T = any>(endpoint: string, options?: RequestOptions): Promise<T> => {
+    appCache.clear();
+    return request<T>(endpoint, { method: 'DELETE', ...options });
+  },
 
-  upload: <T = any>(endpoint: string, file: File, fieldName = 'file') => {
+  upload: async <T = any>(endpoint: string, file: File, fieldName = 'file'): Promise<T> => {
+    appCache.clear();
     const formData = new FormData();
     formData.append(fieldName, file);
     return request<T>(endpoint, {
@@ -123,3 +199,4 @@ export const api = {
     });
   },
 };
+

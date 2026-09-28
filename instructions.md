@@ -107,8 +107,9 @@ campus_competetion/
 | `DB_PASSWORD` | *(empty string)* | MySQL user password |
 | `DB_NAME` | `unisync_campus` | Target database name |
 | `JWT_SECRET` | `unisync_super_secret_jwt_encryption_key_2026!` | Secret key for JWT signature |
-| `JWT_EXPIRES_IN` | `7d` | Token lifetime |
+| `JWT_EXPIRES_IN` | `50m` | Token & Session lifetime (50 minutes auto-expiration) |
 | `FRONTEND_URL` | `http://localhost:5173` | Allowed CORS origin for Vite client |
+| `RATE_LIMIT_MAX` | `1500` | IP rate limit maximum requests per 15 minutes window |
 | `UPLOAD_DIR` | `uploads` | Relative directory path for saved uploads |
 | `MAX_FILE_SIZE_MB`| `15` | Maximum upload file size in megabytes |
 | `ADMIN_NAME` | `Chief Administrator` | Admin account name |
@@ -130,22 +131,31 @@ campus_competetion/
 
 ## 5. Database Setup, Auto-Sync & Seeding
 
-### Automatic Synchronization on Connection:
-Following the production standard of enterprise Node.js/MySQL backends, **every time the backend server starts or restarts**, it automatically executes:
-1. `initDb()`: Verifies the MySQL connection and creates all missing tables (`users`, `venues`, `clubs`, `events`, `event_registrations`, `event_reviews`, `notifications`).
-2. `syncDatabase()`: Reads the default Admin, Student, and Club Lead credentials directly from `backend/.env`. If the accounts already exist, it updates their bcrypt password hashes to match `.env`; if missing, it creates them. This guarantees your database credentials are always in sync with your `.env` file without requiring manual re-seeding!
-3. Pre-populates default venues, clubs, and competition events if the database tables are empty.
+### Architecture (Structured like `/home/ares/Projects/leave backend`):
+Following the robust enterprise Node.js/MySQL standard:
+1. `initDb()`: Verifies MySQL connection, creates the database schema (`CREATE DATABASE IF NOT EXISTS`) if missing, autocreates all core tables (`users`, `venues`, `clubs`, `events`, `event_registrations`, `event_reviews`, `notifications`), and applies safe inline column migrations.
+2. `syncDatabase()`: Reads the default Admin, Student, and Club Lead credentials directly from `backend/.env` and upserts them into `users` with bcrypt password hashes. Pre-populates only the campus `venues` list.
+3. **No Member or Mock Events Seed**: Initial seeds are strictly restricted to the **three official login credentials** and the **venues list**. There is zero dummy member seeding.
 
-### Manual Seeding Script:
-You can also run a manual database seed at any time:
+### Manual Seeding & Clean Reset Script:
+Whenever `npm run db:seed` is executed, it **clears and truncates all existing tables** before re-seeding the 3 login credentials and venues list:
 
 ```bash
 # From the root directory:
 npm run seed     # or npm run db:seed
 
 # Or directly from the backend directory:
-cd backend && npm run seed
+cd backend && npm run db:seed
 ```
+
+**Seed Results**:
+- Wipes all old data from `event_reviews`, `event_registrations`, `events`, `clubs`, `notifications`, `venues`, `users`.
+- Seeds **0 Members**.
+- Seeds **3 Login Personas**:
+  1. Chief Administrator (`admin@university.edu` / `Admin@123456`)
+  2. Club Coordinator (`club.lead@university.edu` / `Club@123456`)
+  3. Student Participant (`student@university.edu` / `Student@123456`)
+- Seeds **12 Campus Venues** for event and calendar bookings.
 
 ---
 
@@ -165,10 +175,39 @@ UniSync supports full **login-based authentication** with manual password entry,
 - **Secure Manual Entry**: Pure manual email and password entry with no unsafe client-side credential click triggers or password auto-fill buttons.
 - **Show/Hide Password**: Password visibility toggle button to review typed characters.
 - **Role-Based Redirection**: Users are automatically routed to their corresponding role portal upon successful JWT token issuance.
+- **Protected Route Guards**: Direct access via URL paths (such as `localhost:3000/club` or `/admin`) is strictly guarded. Unauthenticated access immediately redirects to `/login` with return intent preserved. Attempting to access an unauthorized portal with a different role redirects to the user's authorized home.
+- **50-Minute Automatic Session Timeout**: All sessions are strictly limited to 50 minutes. If 50 minutes elapse or the backend returns 401 Unauthorized, an institutional modal dialog appears informing the user that their session has expired, providing an **"OK"** button to log out and return to the login screen.
+- **IP Traffic & Rate Limiting**: The backend enforces an IP rate limit of **1,500 requests per 15 minutes** for general traffic, alongside strict brute-force limiting on `/api/auth/login` (max 50 attempts per 15 minutes) to protect against credential stuffing.
+- **Persona Session Kill & Immediate Logout**: When a user logs out from any persona (Admin, Club Lead, or Student), their active session is marked ended, their JWT token is added to the backend revocation registry (`revokedTokens`) to kill the session immediately, client storage is cleared, and the application LRU cache is completely wiped.
+- **LRU Method Caching (Max 15 items, 30 Minutes TTL)**: Implemented high-performance Least Recently Used (LRU) caching on API GET endpoints. Retains a maximum of 15 response objects with an automatic 30-minute Time-To-Live. Least recently accessed items are evicted when the 15-item limit is reached. The cache is entirely cleared upon persona logout or session expiration.
+- **Polite & Formatted Error Messages**: Technical error codes (e.g. `Request failed with status 500`, `400`, `401`, `403`, `404`, `429`, database codes) are never displayed directly to users. All errors are sanitized through `formatErrorMessage`, providing clear, institutional explanations and actionable guidance.
+- **Cleaned Dynamic Portals**: Removed mock telemetry numbers, hardcoded names, and static placeholders across all login and portal dashboards. Data is dynamically queried from MySQL/database connection.
 
 ---
 
-## 7. Local File Upload Storage
+## 7. Member Profile Dossier View & Telemetry
+
+When clicking the **User Profile Pill** in the top navigation bar or the **Profile Dossier** link in the sidebar, the user is navigated to their dedicated **Member Profile Dossier** (`/admin/profile`, `/club/profile`, or `/student/profile`).
+
+### Onboarding Information Displayed:
+The profile view displays all institutional attributes captured during member onboarding:
+- **Full Legal Name**: Institutional name on record with verified status.
+- **Assigned Institutional Role**: Administrator, Club Coordinator, or Student Participant with clearance tier.
+- **University Email Address**: Primary SSO destination.
+- **Direct Contact Phone**: Direct phone number on record for communications.
+- **Assigned Club / Organization**: Campus society affiliation or Central Governance unit.
+- **Academic Department**: Faculty jurisdiction (e.g. Computer Science, Central Administration).
+- **Account Membership Status**: Active institutional state.
+- **Onboarding Enrollment Date**: Official registration timestamp.
+- **Zero-Trust Security Policies**: Mandatory 50-minute session lifetime, 1500 req/15m rate limiting, and local LRU cache purge status.
+
+### Profile Updating:
+- Members can click **"Edit Profile"** to update their Legal Name, Direct Phone, Department, and Assigned Club.
+- Calls `PUT /api/auth/profile` with JWT authentication, persists updates to MySQL (or in-memory mock store), and immediately syncs `AuthContext` and `Header` states.
+
+---
+
+## 8. Local File Upload Storage
 
 Uploaded media files (posters, banners) and documents (event proposals, budget receipts, permissions) are stored on the local server filesystem:
 

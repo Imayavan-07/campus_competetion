@@ -1,95 +1,173 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { authService, User } from '../services/authService';
+import {
+  SESSION_DURATION_MS,
+  getSessionStartTime,
+  setSessionStartTime,
+  checkIsSessionExpired,
+  getAuthToken,
+} from '../services/apiClient';
+
+import { appCache } from '../utils/lruCache';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  sessionExpiredOpen: boolean;
   login: (email: string, password: string) => Promise<User>;
-  logout: () => void;
-  switchPersona: (role: 'admin' | 'club' | 'student') => Promise<User>;
+  logout: () => Promise<void>;
+  updateUser: (updatedUser: User) => void;
+  refreshUser: () => Promise<void>;
+  handleConfirmSessionExpired: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }): React.JSX.Element {
-  const [user, setUser] = useState<User | null>(() => authService.getCurrentUser());
+  const [user, setUser] = useState<User | null>(() => {
+    // If session is already expired on initial load, do not load stored user
+    if (checkIsSessionExpired()) {
+      authService.logout();
+      appCache.clear();
+      return null;
+    }
+    return authService.getCurrentUser();
+  });
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [sessionExpiredOpen, setSessionExpiredOpen] = useState<boolean>(false);
 
+  // Trigger automated logout and prompt with 50-minute expiration modal
+  const triggerSessionExpired = useCallback(() => {
+    authService.logout();
+    appCache.clear();
+    setUser(null);
+    setSessionExpiredOpen(true);
+  }, []);
+
+  const handleConfirmSessionExpired = useCallback(() => {
+    setSessionExpiredOpen(false);
+    // Force navigate to login
+    window.location.href = '/login';
+  }, []);
+
+  const updateUser = useCallback((updatedUser: User) => {
+    setUser(updatedUser);
+    localStorage.setItem('unisync_user', JSON.stringify(updatedUser));
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await authService.getMe();
+      if (res && res.user) {
+        setUser(res.user);
+        localStorage.setItem('unisync_user', JSON.stringify(res.user));
+      }
+    } catch (e) {
+      console.warn('Could not refresh user details:', e);
+    }
+  }, []);
+
+  // 1. Initial verification & session age check
   useEffect(() => {
     async function verifyUser() {
       try {
-        if (localStorage.getItem('unisync_token')) {
+        const token = getAuthToken();
+        if (token) {
+          if (checkIsSessionExpired()) {
+            triggerSessionExpired();
+            return;
+          }
+
           const res = await authService.getMe();
           if (res.user) {
             setUser(res.user);
             localStorage.setItem('unisync_user', JSON.stringify(res.user));
+          } else {
+            authService.logout();
+            setUser(null);
           }
+        } else {
+          setUser(null);
         }
       } catch (e) {
-        console.warn('Session verification error:', e);
+        console.warn('Session verification notice:', e);
+        // If /me returned 401 or network failed while having token, clear credentials
+        authService.logout();
+        setUser(null);
       } finally {
         setIsLoading(false);
       }
     }
+
     verifyUser();
-  }, []);
+  }, [triggerSessionExpired]);
+
+  // 2. 50-Minute Session Expiration Timer
+  useEffect(() => {
+    if (!user) return;
+
+    const startTime = getSessionStartTime() || Date.now();
+    const elapsed = Date.now() - startTime;
+    const remainingMs = Math.max(SESSION_DURATION_MS - elapsed, 0);
+
+    if (remainingMs <= 0) {
+      triggerSessionExpired();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      triggerSessionExpired();
+    }, remainingMs);
+
+    return () => clearTimeout(timer);
+  }, [user, triggerSessionExpired]);
+
+  // 3. Listen for global 401 / session expiration events dispatched by apiClient
+  useEffect(() => {
+    const handleExpiredEvent = () => {
+      triggerSessionExpired();
+    };
+
+    window.addEventListener('unisync:session-expired', handleExpiredEvent);
+    return () => {
+      window.removeEventListener('unisync:session-expired', handleExpiredEvent);
+    };
+  }, [triggerSessionExpired]);
 
   const login = async (email: string, password: string): Promise<User> => {
     const res = await authService.login(email, password);
+    setSessionStartTime(Date.now());
     setUser(res.user);
+    setSessionExpiredOpen(false);
     return res.user;
   };
 
-  const logout = () => {
-    authService.logout();
+  const logout = async () => {
+    await authService.logout();
+    appCache.clear();
     setUser(null);
-  };
-
-  const switchPersona = async (role: 'admin' | 'club' | 'student'): Promise<User> => {
-    let email = 'student@university.edu';
-    let password = 'Student@123456';
-
-    if (role === 'admin') {
-      email = 'admin@university.edu';
-      password = 'Admin@123456';
-    } else if (role === 'club') {
-      email = 'club.lead@university.edu';
-      password = 'Club@123456';
-    }
-
-    try {
-      return await login(email, password);
-    } catch {
-      // Offline fallback mock user
-      const fallbackUser: User = {
-        id: role === 'admin' ? 1 : role === 'club' ? 2 : 3,
-        name: role === 'admin' ? 'Chief Administrator' : role === 'club' ? 'Bob Smith' : 'Alex Vance',
-        email,
-        role,
-        status: 'Active',
-      };
-      setUser(fallbackUser);
-      localStorage.setItem('unisync_user', JSON.stringify(fallbackUser));
-      return fallbackUser;
-    }
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && !checkIsSessionExpired(),
         isLoading,
+        sessionExpiredOpen,
         login,
         logout,
-        switchPersona,
+        updateUser,
+        refreshUser,
+        handleConfirmSessionExpired,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
 }
+
 
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);

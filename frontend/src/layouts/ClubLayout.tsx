@@ -31,6 +31,7 @@ export default function ClubLayout(): React.JSX.Element {
     }
   ];
 
+
   return (
     <div className="app-layout">
       <Sidebar 
@@ -39,7 +40,7 @@ export default function ClubLayout(): React.JSX.Element {
         sections={clubSections} 
       />
       <main className="main-content">
-        <Header roleLabel="Club Executive" userName={user?.assigned_club || user?.name || "Robotics Society"} />
+        <Header roleLabel="Club Executive" userName={user?.assigned_club || user?.name || "Club Executive"} />
         <div className="page-container">
           <Outlet />
         </div>

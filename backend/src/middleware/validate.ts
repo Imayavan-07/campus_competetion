@@ -22,9 +22,12 @@ export function validate(schemas: ValidationTarget) {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
+        const errorDescriptions = error.errors
+          .map((e) => `${e.path.join('.') || 'input'}: ${e.message}`)
+          .join('; ');
         res.status(400).json({
           success: false,
-          message: 'Validation failed.',
+          message: `Please check your submitted details: ${errorDescriptions}`,
           errors: error.errors.map((e) => ({
             field: e.path.join('.'),
             message: e.message,

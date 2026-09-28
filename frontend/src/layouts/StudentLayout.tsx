@@ -4,8 +4,9 @@ import Sidebar, { NavSection } from '../components/Sidebar';
 import Header from '../components/Header';
 import { 
   HomeIcon, 
-  TrophyIcon 
+  TrophyIcon
 } from '../components/common/Icons';
+
 
 import { useAuth } from '../context/AuthContext';
 
@@ -18,6 +19,7 @@ export default function StudentLayout(): React.JSX.Element {
         { label: 'Dashboard', path: '/student', exact: true, icon: HomeIcon },
       ]
     },
+
     {
       title: "Campus Engagement",
       items: [
@@ -25,6 +27,7 @@ export default function StudentLayout(): React.JSX.Element {
       ]
     }
   ];
+
 
   return (
     <div className="app-layout">
@@ -34,7 +37,7 @@ export default function StudentLayout(): React.JSX.Element {
         sections={studentSections} 
       />
       <main className="main-content">
-        <Header roleLabel="Student" userName={user?.name || "Alex Vance"} />
+        <Header roleLabel="Student" userName={user?.name || "Enrolled Student"} />
         <div className="page-container">
           <Outlet />
         </div>

@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-import { initDb, syncDatabase } from './db';
+import { initDb, syncDatabase, clearDatabase } from './db';
 import { ENV } from './config/env';
 
 const seed = async () => {
@@ -18,14 +18,21 @@ const seed = async () => {
   console.log(`[Config] Club Lead Email: ${ENV.CLUB_LEAD.EMAIL}\n`);
 
   try {
-    console.log('🔄 Initializing database schema...');
+    console.log('🔄 Initializing database connection & schema tables...');
     await initDb();
 
-    console.log('🔄 Performing explicit database synchronization...');
+    console.log('🧹 Clearing old data for fresh seed (no member seed)...');
+    await clearDatabase();
+
+    console.log('🔄 Seeding ONLY official login credentials and venues list...');
     await syncDatabase();
 
     console.log('\n=============================================================');
-    console.log('✅ Database Seeding & Synchronization Completed Successfully!');
+    console.log('✅ Fresh Database Seed Completed Successfully!');
+    console.log('   - Old data wiped cleanly');
+    console.log('   - 0 Member seeds');
+    console.log('   - Only 3 official login credentials seeded');
+    console.log('   - Campus venues list seeded');
     console.log('=============================================================\n');
     console.log('Configured Default Login Credentials:');
     console.log('-------------------------------------------------------------');

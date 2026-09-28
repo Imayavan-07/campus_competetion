@@ -9,6 +9,7 @@ export interface User {
   dept?: string;
   assigned_club?: string;
   status: 'Active' | 'Inactive';
+  created_at?: string;
 }
 
 export interface AuthResponse {
@@ -41,9 +42,24 @@ export const authService = {
     return api.get('/auth/me');
   },
 
-  logout: (): void => {
-    removeAuthToken();
-    localStorage.removeItem('unisync_user');
+  updateProfile: async (data: Partial<User>): Promise<{ success: boolean; user: User; message: string }> => {
+    const res = await api.put<{ success: boolean; user: User; message: string }>('/auth/profile', data);
+    if (res.user) {
+      localStorage.setItem('unisync_user', JSON.stringify(res.user));
+    }
+    return res;
+  },
+
+  logout: async (): Promise<void> => {
+    try {
+      await api.post('/auth/logout', {});
+    } catch {
+      // Ignore network failures on logout; local session must still be killed immediately
+    } finally {
+      removeAuthToken();
+      localStorage.removeItem('unisync_user');
+      sessionStorage.clear();
+    }
   },
 
   getCurrentUser: (): User | null => {
@@ -56,3 +72,4 @@ export const authService = {
     }
   },
 };
+

@@ -19,6 +19,8 @@ import {
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../components/common/Toast';
 import { dashboardService, DashboardData } from '../../services/dashboardService';
+import { clubsService } from '../../services/clubsService';
+import { formatErrorMessage } from '../../utils/errorFormatter';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -30,7 +32,7 @@ export default function AdminDashboard() {
     async function loadStats() {
       try {
         const res = await dashboardService.getStats();
-        if (res.data) setStats(res.data);
+        if (res?.data) setStats(res.data);
       } catch (e) {
         console.warn('Could not load dashboard stats:', e);
       }
@@ -44,12 +46,30 @@ export default function AdminDashboard() {
   // Form states
   const [clubForm, setClubForm] = useState({ name: '', dept: 'Engineering', lead: '', email: '' });
 
-  const handleCreateClub = (e: React.FormEvent) => {
+  const handleCreateClub = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clubForm.name) return;
-    showToast(`Club "${clubForm.name}" registered successfully!`, 'success');
-    setClubForm({ name: '', dept: 'Engineering', lead: '', email: '' });
-    setActiveModal(null);
+    if (!clubForm.name.trim()) {
+      showToast('Please enter a valid club name.', 'error');
+      return;
+    }
+    try {
+      await clubsService.createClub({
+        name: clubForm.name.trim(),
+        dept: clubForm.dept,
+        president: clubForm.lead.trim() || 'Club Executive',
+        coordinator: 'Faculty Coordinator',
+        email: clubForm.email.trim() || `${clubForm.name.toLowerCase().replace(/\s+/g, '')}@university.edu`,
+        members: 1,
+        events: 0,
+      });
+      showToast(`Club "${clubForm.name}" registered and activated successfully!`, 'success');
+      setClubForm({ name: '', dept: 'Engineering', lead: '', email: '' });
+      setActiveModal(null);
+      const refreshed = await dashboardService.getStats();
+      if (refreshed?.data) setStats(refreshed.data);
+    } catch (err: any) {
+      showToast(formatErrorMessage(err), 'error');
+    }
   };
 
   // Weekly occupancy dataset for Global Calendar Bar Chart (Mon-Sun)

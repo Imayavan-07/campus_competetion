@@ -1,7 +1,10 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ToastProvider } from './components/common/Toast';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import ProtectedRoute from './components/common/ProtectedRoute';
+import SessionExpiredModal from './components/common/SessionExpiredModal';
+import ErrorBoundary from './components/common/ErrorBoundary';
 
 // Layouts
 import StudentLayout from './layouts/StudentLayout';
@@ -30,57 +33,101 @@ import AddClub from './pages/admin/AddClub';
 import ClubDetails from './pages/admin/ClubDetails';
 import GlobalCalendar from './pages/admin/GlobalCalendar';
 import EventApprovals from './pages/admin/EventApprovals';
-import EventDirectory from './pages/admin/EventDirectory';
 import EventDetails from './pages/admin/EventDetails';
+import EventDirectory from './pages/admin/EventDirectory';
 import EventReviews from './pages/admin/EventReviews';
 
 import Login from './pages/Login';
-import ErrorBoundary from './components/common/ErrorBoundary';
+import UserProfile from './pages/common/Profile';
+
+function AppRoutes(): React.JSX.Element {
+  const { sessionExpiredOpen, handleConfirmSessionExpired } = useAuth();
+
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<Login />} />
+
+        {/* Protected Student Routes - Only authenticated students can enter */}
+        <Route
+          path="/student"
+          element={
+            <ProtectedRoute allowedRoles={['student']}>
+              <StudentLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<StudentDashboard />} />
+          <Route path="competitions" element={<StudentCompetitions />} />
+          <Route path="profile" element={<UserProfile />} />
+        </Route>
+
+        {/* Protected Club Routes - Only authenticated club leads can enter */}
+        <Route
+          path="/club"
+          element={
+            <ProtectedRoute allowedRoles={['club']}>
+              <ClubLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<ClubDashboard />} />
+          <Route path="post-event" element={<PostNewEvent />} />
+          <Route path="events" element={<ManageEvents />} />
+          <Route path="registrations" element={<ClubRegistrations />} />
+          <Route path="forms" element={<ClubRegistrationForms />} />
+          <Route path="events/:id" element={<ClubEventDetails />} />
+          <Route path="calendar" element={<ClubCalendar />} />
+          <Route path="reviews" element={<ClubEventReviews />} />
+          <Route path="profile" element={<UserProfile />} />
+        </Route>
+
+        {/* Protected Admin Routes - Only authenticated administrators can enter */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<AdminDashboard />} />
+          <Route path="members" element={<Members />} />
+          <Route path="clubs" element={<Clubs />} />
+          <Route path="clubs/new" element={<AddClub />} />
+          <Route path="clubs/:id" element={<ClubDetails />} />
+          <Route path="calendar" element={<GlobalCalendar />} />
+          <Route path="approvals" element={<EventApprovals />} />
+          <Route path="approvals/:id" element={<EventDetails />} />
+          <Route path="events" element={<EventDirectory />} />
+          <Route path="events/:id" element={<EventDetails />} />
+          <Route path="reviews" element={<EventReviews />} />
+          <Route path="profile" element={<UserProfile />} />
+        </Route>
+
+
+        {/* Catch-all unknown routes */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+
+      {/* Automatic 50-minute session expiry dialog */}
+      <SessionExpiredModal
+        isOpen={sessionExpiredOpen}
+        onConfirm={handleConfirmSessionExpired}
+      />
+    </>
+  );
+}
 
 export default function App(): React.JSX.Element {
   return (
     <AuthProvider>
       <ToastProvider>
         <ErrorBoundary fallbackTitle="Application Portal Error">
-          <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
-            <Route path="/login" element={<Login />} />
-
-          {/* Student Routes */}
-          <Route path="/student" element={<StudentLayout />}>
-            <Route index element={<StudentDashboard />} />
-            <Route path="competitions" element={<StudentCompetitions />} />
-          </Route>
-
-          {/* Club Routes */}
-          <Route path="/club" element={<ClubLayout />}>
-            <Route index element={<ClubDashboard />} />
-            <Route path="post-event" element={<PostNewEvent />} />
-            <Route path="events" element={<ManageEvents />} />
-            <Route path="registrations" element={<ClubRegistrations />} />
-            <Route path="forms" element={<ClubRegistrationForms />} />
-            <Route path="events/:id" element={<ClubEventDetails />} />
-            <Route path="calendar" element={<ClubCalendar />} />
-            <Route path="reviews" element={<ClubEventReviews />} />
-          </Route>
-
-          {/* Admin Routes */}
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<AdminDashboard />} />
-            <Route path="members" element={<Members />} />
-            <Route path="clubs" element={<Clubs />} />
-            <Route path="clubs/new" element={<AddClub />} />
-            <Route path="clubs/:id" element={<ClubDetails />} />
-            <Route path="calendar" element={<GlobalCalendar />} />
-            <Route path="approvals" element={<EventApprovals />} />
-            <Route path="approvals/:id" element={<EventDetails />} />
-            <Route path="events" element={<EventDirectory />} />
-            <Route path="events/:id" element={<EventDetails />} />
-            <Route path="reviews" element={<EventReviews />} />
-          </Route>
-        </Routes>
-      </ErrorBoundary>
-    </ToastProvider>
-  </AuthProvider>
-);
+          <AppRoutes />
+        </ErrorBoundary>
+      </ToastProvider>
+    </AuthProvider>
+  );
 }

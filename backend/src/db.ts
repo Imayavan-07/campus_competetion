@@ -1,34 +1,29 @@
 import mysql, { Pool } from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
-import path from 'path';
-import fs from 'fs';
 import { ENV } from './config/env';
 import {
   INITIAL_VENUES,
-  INITIAL_CLUBS,
-  INITIAL_MEMBERS,
   getInitialUsers,
-  INITIAL_EVENTS,
-  INITIAL_REGISTRATIONS,
-  INITIAL_REVIEWS,
 } from './db/seedData';
 
 let pool: Pool | null = null;
 let isConnectedToMySQL = false;
 
 // Resilient In-Memory store fallback
+// Seeded ONLY with the 3 login credentials and venues list; no members or mock events
 export const mockStore = {
   users: [] as any[],
   venues: [...INITIAL_VENUES],
-  clubs: [...INITIAL_CLUBS],
-  members: [...INITIAL_MEMBERS],
-  events: [...INITIAL_EVENTS],
-  registrations: [...INITIAL_REGISTRATIONS],
-  reviews: [...INITIAL_REVIEWS],
+  clubs: [] as any[],
+  members: [] as any[],
+  events: [] as any[],
+  registrations: [] as any[],
+  reviews: [] as any[],
+  notifications: [] as any[],
 };
 
 /**
- * Access the database instance or connection state
+ * Access the active database instance or connection state
  */
 export function getDb() {
   return {
@@ -48,11 +43,11 @@ export const db = {
   query: async (sql: string, params?: any[]) => {
     if (!pool) throw new Error('Database pool not initialized');
     return pool.query(sql, params);
-  }
+  },
 };
 
 /**
- * Create connection pool to MySQL
+ * Create connection pool to MySQL target database
  */
 function createConnectionPool() {
   return mysql.createPool({
@@ -70,13 +65,24 @@ function createConnectionPool() {
 }
 
 /**
- * Initialize MySQL Database tables, inline migrations, and synchronize default credentials
+ * Initialize MySQL Database:
+ * 1. Verifies connection & auto-creates database schema if missing.
+ * 2. Autocreates all tables (users, venues, clubs, events, registrations, reviews, notifications).
+ * 3. Applies safe inline migrations.
+ * 4. Synchronizes only the 3 login credentials and venues list.
  */
 export async function initDb() {
   console.log('🔄 Initializing MySQL Database Connection...');
 
-  // Ensure in-memory mock store has bcrypt passwords
+  // Initialize in-memory fallback with only the 3 credentials
   mockStore.users = await getInitialUsers();
+  mockStore.venues = [...INITIAL_VENUES];
+  mockStore.clubs = [];
+  mockStore.members = [];
+  mockStore.events = [];
+  mockStore.registrations = [];
+  mockStore.reviews = [];
+  mockStore.notifications = [];
 
   try {
     // 1. Direct connection attempt to target database
@@ -85,8 +91,9 @@ export async function initDb() {
       const testConn = await pool.getConnection();
       testConn.release();
     } catch (directErr: any) {
-      // If DB does not exist, connect without database to create it
+      // If target database does not exist, connect to server without database and create it
       if (directErr.code === 'ER_BAD_DB_ERROR' || directErr.errno === 1049) {
+        console.log(`📦 Database \`${ENV.DB.NAME}\` does not exist. Creating schema...`);
         const rootConn = await mysql.createConnection({
           host: ENV.DB.HOST,
           port: ENV.DB.PORT,
@@ -109,14 +116,18 @@ export async function initDb() {
     isConnectedToMySQL = true;
     console.log(`📂 Database connected successfully: ${ENV.DB.NAME} on ${ENV.DB.HOST}:${ENV.DB.PORT}`);
 
-    // 2. Ensure all core tables exist
+    // 2. Autocreate all required tables
     await createTablesIfNotExist();
 
-    // 3. Auto-sync credentials from .env and seed initial data
+    // 3. Apply safe inline column migrations
+    await runMigrations();
+
+    // 4. Synchronize default credentials from .env and seed venues
     await syncDatabase();
 
   } catch (err: any) {
     isConnectedToMySQL = false;
+    pool = null;
     console.warn(`\n⚠️  [Database Warning] Could not connect to MySQL server (${err.code || err.message}).`);
     console.warn(`⚠️  [Database Notice] Operating in Resilient Mock DB mode for local development.`);
     console.warn(`💡 [Database Tip] To connect to MySQL, verify host, port, user, password in backend/.env.\n`);
@@ -124,39 +135,234 @@ export async function initDb() {
 }
 
 /**
- * Core table creation schema
+ * Autocreate all application tables if not exist (structured like leave backend)
  */
 async function createTablesIfNotExist() {
   if (!pool) return;
 
-  const schemaPath = path.resolve(__dirname, 'db/schema.sql');
-  if (fs.existsSync(schemaPath)) {
-    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-    const statements = schemaSql
-      .split(';')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith('--'));
+  // 1. Users Table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(150) NOT NULL,
+      email VARCHAR(191) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      role ENUM('admin', 'club', 'student') NOT NULL DEFAULT 'student',
+      phone VARCHAR(50) DEFAULT NULL,
+      dept VARCHAR(100) DEFAULT NULL,
+      assigned_club VARCHAR(150) DEFAULT NULL,
+      status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_users_role (role),
+      INDEX idx_users_email (email)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
 
-    for (const stmt of statements) {
-      try {
-        await pool.query(stmt);
-      } catch (e: any) {
-        console.warn(`⚠️  Schema statement notice: ${e.message}`);
-      }
+  // 2. Venues Table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS venues (
+      id VARCHAR(50) PRIMARY KEY,
+      name VARCHAR(150) NOT NULL,
+      capacity INT NOT NULL DEFAULT 100,
+      building VARCHAR(150) NOT NULL,
+      facilities TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  // 3. Clubs Table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS clubs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(150) NOT NULL UNIQUE,
+      dept VARCHAR(100) NOT NULL,
+      president VARCHAR(150) NOT NULL,
+      coordinator VARCHAR(150) NOT NULL,
+      email VARCHAR(191) NOT NULL,
+      phone VARCHAR(50) DEFAULT NULL,
+      description TEXT,
+      category VARCHAR(100) DEFAULT 'Academic',
+      logo_url VARCHAR(255) DEFAULT NULL,
+      constitution_pdf_url VARCHAR(255) DEFAULT NULL,
+      members_count INT NOT NULL DEFAULT 0,
+      events_count INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_clubs_dept (dept)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  // 4. Events & Proposals Table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS events (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      club VARCHAR(150) NOT NULL,
+      category VARCHAR(100) DEFAULT 'Competition',
+      description TEXT,
+      justification TEXT,
+      date VARCHAR(100) NOT NULL,
+      time_slot VARCHAR(100) NOT NULL,
+      month VARCHAR(20) DEFAULT NULL,
+      day VARCHAR(20) DEFAULT NULL,
+      venue VARCHAR(150) NOT NULL,
+      budget VARCHAR(50) NOT NULL DEFAULT '$1,000',
+      attendees INT NOT NULL DEFAULT 100,
+      status VARCHAR(50) NOT NULL DEFAULT 'Upcoming',
+      approval_status VARCHAR(50) NOT NULL DEFAULT 'Approved',
+      timeframe VARCHAR(50) NOT NULL DEFAULT 'Future',
+      lead_coordinator VARCHAR(150) DEFAULT NULL,
+      coordinator_email VARCHAR(191) DEFAULT NULL,
+      faculty_advisor VARCHAR(150) DEFAULT NULL,
+      student_host VARCHAR(150) DEFAULT NULL,
+      hosts_json JSON DEFAULT NULL,
+      agenda_json JSON DEFAULT NULL,
+      budget_breakdown_json JSON DEFAULT NULL,
+      ai_summary_json JSON DEFAULT NULL,
+      has_reg_form BOOLEAN NOT NULL DEFAULT TRUE,
+      reg_form_config_json JSON DEFAULT NULL,
+      registration_json JSON DEFAULT NULL,
+      poster_url VARCHAR(255) DEFAULT NULL,
+      guidelines_pdf_url VARCHAR(255) DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_events_club (club),
+      INDEX idx_events_status (status),
+      INDEX idx_events_approval (approval_status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  // 5. Event Registrations Table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_registrations (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      event_id INT NOT NULL,
+      student_name VARCHAR(150) NOT NULL,
+      student_reg_no VARCHAR(50) NOT NULL,
+      email VARCHAR(191) NOT NULL,
+      track VARCHAR(100) DEFAULT 'General Track',
+      team_name VARCHAR(150) DEFAULT NULL,
+      status VARCHAR(50) NOT NULL DEFAULT 'Confirmed',
+      checked_in BOOLEAN NOT NULL DEFAULT FALSE,
+      ticket_id VARCHAR(50) NOT NULL UNIQUE,
+      form_responses_json JSON DEFAULT NULL,
+      resume_or_doc_url VARCHAR(255) DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_reg_event (event_id),
+      INDEX idx_reg_email (email),
+      CONSTRAINT fk_reg_event FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  // 6. Event Reviews Table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_reviews (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      event_id INT DEFAULT NULL,
+      title VARCHAR(200) NOT NULL,
+      club VARCHAR(150) NOT NULL,
+      date VARCHAR(100) NOT NULL,
+      venue VARCHAR(150) NOT NULL,
+      overall_rating DECIMAL(2,1) NOT NULL DEFAULT 5.0,
+      turnout_rate VARCHAR(20) DEFAULT '95%',
+      total_reviews INT NOT NULL DEFAULT 0,
+      admin_feedback_json JSON DEFAULT NULL,
+      organizer_reply_json JSON DEFAULT NULL,
+      reviews_json JSON DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  // 7. Notifications Table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT DEFAULT NULL,
+      title VARCHAR(200) NOT NULL,
+      message TEXT NOT NULL,
+      type VARCHAR(50) NOT NULL DEFAULT 'info',
+      is_read TINYINT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_notif_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  console.log('✅ Verified & created application database tables.');
+}
+
+/**
+ * Safe inline schema migrations (pattern from leave backend)
+ */
+async function runMigrations() {
+  if (!pool) return;
+
+  // Migration: Ensure assigned_club in users
+  try {
+    await pool.query('ALTER TABLE users ADD COLUMN assigned_club VARCHAR(150) NULL AFTER dept');
+    console.log('📦 Migration: Added assigned_club to users table');
+  } catch (err: any) {
+    if (err.code !== 'ER_DUP_FIELDNAME') {
+      // Field already exists
     }
-    console.log('✅ Verified schema tables in database.');
+  }
+
+  // Migration: Ensure phone in users
+  try {
+    await pool.query('ALTER TABLE users ADD COLUMN phone VARCHAR(50) NULL AFTER role');
+    console.log('📦 Migration: Added phone to users table');
+  } catch (err: any) {
+    if (err.code !== 'ER_DUP_FIELDNAME') {
+      // Field already exists
+    }
   }
 }
 
 /**
- * Synchronize DB default credentials and seed sample data whenever backend is connected
+ * Clear/Truncate all database tables (clears old data upon re-seeding)
+ */
+export async function clearDatabase() {
+  console.log('🧹 Clearing old database data for fresh seed...');
+
+  // Reset in-memory mock store
+  mockStore.clubs = [];
+  mockStore.members = [];
+  mockStore.events = [];
+  mockStore.registrations = [];
+  mockStore.reviews = [];
+  mockStore.notifications = [];
+
+  if (pool && isConnectedToMySQL) {
+    try {
+      await pool.query('SET FOREIGN_KEY_CHECKS = 0');
+      await pool.query('TRUNCATE TABLE event_reviews');
+      await pool.query('TRUNCATE TABLE event_registrations');
+      await pool.query('TRUNCATE TABLE events');
+      await pool.query('TRUNCATE TABLE clubs');
+      await pool.query('TRUNCATE TABLE notifications');
+      await pool.query('TRUNCATE TABLE venues');
+      await pool.query('TRUNCATE TABLE users');
+      await pool.query('SET FOREIGN_KEY_CHECKS = 1');
+      console.log('✅ Truncated MySQL tables cleanly.');
+    } catch (e: any) {
+      console.error('❌ Error clearing MySQL tables:', e.message);
+    }
+  }
+}
+
+/**
+ * Synchronize environment credentials & venues list only.
+ * NO member seed, NO mock clubs, NO mock events.
  */
 export async function syncDatabase() {
-  if (!pool) return;
+  if (!pool || !isConnectedToMySQL) {
+    console.log('ℹ️  MySQL server offline/unreachable; synchronized in-memory resilient store with 3 logins and venues.');
+    return;
+  }
 
-  console.log('🔄 Synchronizing environment credentials & seed data with MySQL...');
+  console.log('🔄 Synchronizing environment credentials (3 logins) & venues list with MySQL...');
 
-  // 1. Sync Default Administrator Account
+  // 1. Sync Default Administrator Account from .env
   const adminEmail = ENV.ADMIN.EMAIL;
   const adminPassword = ENV.ADMIN.PASSWORD;
   const adminName = ENV.ADMIN.NAME;
@@ -181,7 +387,7 @@ export async function syncDatabase() {
     }
   }
 
-  // 2. Sync Default Student Account
+  // 2. Sync Default Student Account from .env
   const studentEmail = ENV.STUDENT.EMAIL;
   const studentPassword = ENV.STUDENT.PASSWORD;
   const studentName = ENV.STUDENT.NAME;
@@ -206,7 +412,7 @@ export async function syncDatabase() {
     }
   }
 
-  // 3. Sync Default Club Organizer Account
+  // 3. Sync Default Club Coordinator Account from .env
   const clubEmail = ENV.CLUB_LEAD.EMAIL;
   const clubPassword = ENV.CLUB_LEAD.PASSWORD;
   const clubName = ENV.CLUB_LEAD.NAME;
@@ -231,7 +437,7 @@ export async function syncDatabase() {
     }
   }
 
-  // 4. Seed Venues if empty
+  // 4. Seed Venues if empty (Only venues list is pre-seeded)
   const [venueCount]: any = await pool.query('SELECT COUNT(*) as count FROM venues');
   if (venueCount[0].count === 0) {
     for (const v of INITIAL_VENUES) {
@@ -245,113 +451,7 @@ export async function syncDatabase() {
     console.log(`🏟️ Seeded ${INITIAL_VENUES.length} campus venues.`);
   }
 
-  // 5. Seed Clubs if empty
-  const [clubCount]: any = await pool.query('SELECT COUNT(*) as count FROM clubs');
-  if (clubCount[0].count === 0) {
-    for (const c of INITIAL_CLUBS) {
-      await pool.query(
-        `INSERT INTO clubs (id, name, dept, president, coordinator, email, phone, description, category, members_count, events_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE name = VALUES(name), president = VALUES(president)`,
-        [c.id, c.name, c.dept, c.president, c.coordinator, c.email, c.phone, c.description, c.category, c.members_count, c.events_count]
-      );
-    }
-    console.log(`🎪 Seeded ${INITIAL_CLUBS.length} student clubs.`);
-  }
-
-  // 6. Seed Events if empty
-  const [eventCount]: any = await pool.query('SELECT COUNT(*) as count FROM events');
-  if (eventCount[0].count === 0) {
-    for (const e of INITIAL_EVENTS) {
-      await pool.query(
-        `INSERT INTO events (id, title, club, category, description, justification, date, time_slot, month, day, venue, budget, attendees, status, approval_status, timeframe, lead_coordinator, coordinator_email, agenda_json, budget_breakdown_json, ai_summary_json, has_reg_form, reg_form_config_json, registration_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE title = VALUES(title)`,
-        [
-          e.id,
-          e.title,
-          e.club,
-          e.category,
-          e.description,
-          e.justification,
-          e.date,
-          e.time_slot,
-          e.month,
-          e.day,
-          e.venue,
-          e.budget,
-          e.attendees,
-          e.status,
-          e.approval_status,
-          e.timeframe,
-          e.lead_coordinator,
-          e.coordinator_email,
-          JSON.stringify(e.agenda_json),
-          JSON.stringify(e.budget_breakdown_json),
-          JSON.stringify(e.ai_summary_json),
-          e.has_reg_form ? 1 : 0,
-          JSON.stringify(e.reg_form_config_json),
-          JSON.stringify(e.registration_json),
-        ]
-      );
-    }
-    console.log(`📅 Seeded ${INITIAL_EVENTS.length} campus events.`);
-  }
-
-  // 7. Seed Registrations if empty
-  const [regCount]: any = await pool.query('SELECT COUNT(*) as count FROM event_registrations');
-  if (regCount[0].count === 0) {
-    for (const r of INITIAL_REGISTRATIONS) {
-      await pool.query(
-        `INSERT INTO event_registrations (id, event_id, student_name, student_reg_no, email, track, team_name, status, checked_in, ticket_id, form_responses_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE status = VALUES(status)`,
-        [
-          r.id,
-          r.event_id,
-          r.student_name,
-          r.student_reg_no,
-          r.email,
-          r.track,
-          r.team_name,
-          r.status,
-          r.checked_in ? 1 : 0,
-          r.ticket_id,
-          JSON.stringify(r.form_responses_json),
-        ]
-      );
-    }
-    console.log(`🎟️ Seeded ${INITIAL_REGISTRATIONS.length} event registrations.`);
-  }
-
-  // 8. Seed Reviews if empty
-  const [revCount]: any = await pool.query('SELECT COUNT(*) as count FROM event_reviews');
-  if (revCount[0].count === 0) {
-    for (const rev of INITIAL_REVIEWS) {
-      await pool.query(
-        `INSERT INTO event_reviews (id, event_id, title, club, date, venue, overall_rating, turnout_rate, total_reviews, admin_feedback_json, organizer_reply_json, reviews_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE title = VALUES(title)`,
-        [
-          rev.id,
-          rev.event_id,
-          rev.title,
-          rev.club,
-          rev.date,
-          rev.venue,
-          rev.overall_rating,
-          rev.turnout_rate,
-          rev.total_reviews,
-          JSON.stringify(rev.admin_feedback_json),
-          JSON.stringify(rev.organizer_reply_json),
-          JSON.stringify(rev.reviews_json),
-        ]
-      );
-    }
-    console.log(`⭐ Seeded ${INITIAL_REVIEWS.length} event reviews.`);
-  }
-
-  console.log('✅ Database synchronization complete.\n');
+  console.log('✅ Database credentials and venues synchronization complete.\n');
 }
 
 // Backward-compatible export

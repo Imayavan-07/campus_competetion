@@ -16,7 +16,7 @@ export const ENV = {
   },
   JWT: {
     SECRET: process.env.JWT_SECRET || 'unisync_super_secret_jwt_encryption_key_2026!',
-    EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
+    EXPIRES_IN: process.env.JWT_EXPIRES_IN || '50m',
   },
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
   UPLOAD_DIR: process.env.UPLOAD_DIR || 'uploads',

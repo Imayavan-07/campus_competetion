@@ -20,7 +20,19 @@ export async function getMembers(req: Request, res: Response): Promise<void> {
   const { search, role, dept, status, sortBy } = req.query;
   const db = getDb();
 
-  let members: any[] = [...mockStore.members];
+  let members: any[] = mockStore.members.length > 0
+    ? [...mockStore.members]
+    : mockStore.users.map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        role: u.role,
+        email: u.email,
+        phone: u.phone || '+1 (555) 000-0000',
+        dept: u.dept || 'Campus General',
+        assignedClub: u.assigned_club || 'Campus Body',
+        assigned_club: u.assigned_club || 'Campus Body',
+        status: u.status || 'Active',
+      }));
 
   if (db.isMySQL && db.pool) {
     try {

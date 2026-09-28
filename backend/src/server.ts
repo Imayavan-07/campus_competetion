@@ -39,18 +39,31 @@ app.use(
   })
 );
 
-// --- Rate Limiting ---
-const limiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 1000, // Limit each IP to 1000 requests per windowMs
+// --- Rate Limiting (1500 requests per 15 minutes) ---
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1500, // Limit each IP to 1500 requests per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    message: 'Too many requests from this IP, please try again after 10 minutes',
+    message: 'Rate limit exceeded: 1500 requests per 15 minutes limit reached. Please try again after 15 minutes.',
   },
 });
-app.use('/api/', limiter);
+app.use('/api/', generalLimiter);
+
+// --- Auth Login Limiter (Brute-Force Protection: max 50 attempts per 15 mins) ---
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many authentication attempts from this IP. Please wait 15 minutes before retrying.',
+  },
+});
+app.use('/api/auth/login', authLimiter);
 
 // --- Request Debugger (matching leave backend) ---
 app.use((req, res, next) => {
